@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/dwirijal/dwizzySCRAPE/internal/content"
@@ -13,6 +14,7 @@ import (
 	"github.com/dwirijal/dwizzySCRAPE/internal/komiku"
 	"github.com/dwirijal/dwizzySCRAPE/internal/manhwaindo"
 	"github.com/dwirijal/dwizzySCRAPE/internal/samehadaku"
+	"github.com/dwirijal/dwizzySCRAPE/internal/tmdb"
 )
 
 type MovieClient interface {
@@ -27,6 +29,11 @@ type ReadingService interface {
 	FetchCatalog(ctx context.Context, page int) ([]content.ManhwaSeries, error)
 	FetchSeries(ctx context.Context, slug string) (content.ManhwaSeries, error)
 	FetchChapter(ctx context.Context, slug string) (content.ManhwaChapter, error)
+}
+
+type MovieMetadataClient interface {
+	Enabled() bool
+	SearchMovies(ctx context.Context, query string, year, limit int) ([]tmdb.SearchHit, error)
 }
 
 type AnimeCollector struct {
@@ -200,7 +207,9 @@ func (c *AnimeCollector) fetchAnimePlayback(ctx context.Context, animeSlug, epis
 }
 
 type MovieCollector struct {
-	Client MovieClient
+	Client         MovieClient
+	MetadataClient MovieMetadataClient
+	posterCache    map[string]string
 }
 
 func (c *MovieCollector) Domain() string {
@@ -228,6 +237,7 @@ func (c *MovieCollector) writeDomainDocs(ctx Context, writer *Writer, options Bu
 	if err != nil {
 		return nil, fmt.Errorf("fetch movie home: %w", err)
 	}
+	home = c.enrichMovieCards(ctx, home)
 	if _, err := writer.Write(c.Domain(), KindHome, "hot", home); err != nil {
 		return nil, err
 	}
@@ -238,6 +248,7 @@ func (c *MovieCollector) writeDomainDocs(ctx Context, writer *Writer, options Bu
 		if err != nil {
 			continue
 		}
+		items = c.enrichMovieCards(ctx, items)
 		if _, err := writer.Write(c.Domain(), KindCatalog, fmt.Sprintf("genre-%s-page-%d", genre, options.CatalogPage), items); err != nil {
 			return nil, err
 		}
@@ -249,6 +260,7 @@ func (c *MovieCollector) writeDomainDocs(ctx Context, writer *Writer, options Bu
 		if err != nil {
 			continue
 		}
+		items = c.enrichMovieCards(ctx, items)
 		if _, err := writer.Write(c.Domain(), KindSearch, query, items); err != nil {
 			return nil, err
 		}
@@ -281,6 +293,51 @@ func (c *MovieCollector) writeTitleAndPlayback(ctx context.Context, writer *Writ
 	}
 	_, err = writer.Write(c.Domain(), KindPlayback, slug, stream)
 	return err
+}
+
+func (c *MovieCollector) enrichMovieCards(ctx context.Context, items []kanata.HomeMovie) []kanata.HomeMovie {
+	if len(items) == 0 || c.MetadataClient == nil || !c.MetadataClient.Enabled() {
+		return items
+	}
+	if c.posterCache == nil {
+		c.posterCache = make(map[string]string)
+	}
+	out := make([]kanata.HomeMovie, len(items))
+	copy(out, items)
+	for i := range out {
+		if poster := c.lookupMoviePoster(ctx, out[i]); poster != "" {
+			out[i].Poster = poster
+		}
+	}
+	return out
+}
+
+func (c *MovieCollector) lookupMoviePoster(ctx context.Context, item kanata.HomeMovie) string {
+	if c.MetadataClient == nil || !c.MetadataClient.Enabled() {
+		return ""
+	}
+	title := strings.TrimSpace(item.Title)
+	if title == "" {
+		return ""
+	}
+	cacheKey := strings.ToLower(title) + "#" + strings.TrimSpace(item.Year)
+	if poster, ok := c.posterCache[cacheKey]; ok {
+		return poster
+	}
+	year, _ := strconv.Atoi(strings.TrimSpace(item.Year))
+	results, err := c.MetadataClient.SearchMovies(ctx, title, year, 5)
+	if err != nil {
+		c.posterCache[cacheKey] = ""
+		return ""
+	}
+	match, ok := tmdb.PickBestMovieMatch(title, year, results)
+	if !ok {
+		c.posterCache[cacheKey] = ""
+		return ""
+	}
+	poster := tmdb.BuildPosterURL(match.PosterPath)
+	c.posterCache[cacheKey] = poster
+	return poster
 }
 
 type ReadingCollector struct {
@@ -403,9 +460,9 @@ func PatchPack(ctx Context, collectors []Collector, domain, slug string, options
 	return Manifest{}, fmt.Errorf("unsupported snapshot domain %q", domain)
 }
 
-func DefaultCollectors(movieClient MovieClient, animeFetcher samehadaku.Fetcher, catalogURL string, manhwaService *manhwaindo.Service, komikuService *komiku.Service, postgresURL string) []Collector {
+func DefaultCollectors(movieClient MovieClient, movieMetadataClient MovieMetadataClient, animeFetcher samehadaku.Fetcher, catalogURL string, manhwaService *manhwaindo.Service, komikuService *komiku.Service, postgresURL string) []Collector {
 	collectors := []Collector{
-		&MovieCollector{Client: movieClient},
+		&MovieCollector{Client: movieClient, MetadataClient: movieMetadataClient},
 		&AnimeCollector{CatalogURL: catalogURL, Fetcher: animeFetcher},
 		NewReadingCollector("manhwaindo", manhwaService),
 		NewReadingCollector("komiku", komikuService),

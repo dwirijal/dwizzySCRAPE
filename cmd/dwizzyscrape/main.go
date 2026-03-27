@@ -1008,10 +1008,12 @@ func patchSnapshots(ctx context.Context, cfg config.Config, httpClient *http.Cli
 func newSnapshotCollectors(cfg config.Config, httpClient *http.Client) []snapshot.Collector {
 	animeFetcher := samehadaku.NewHTTPClient(cfg.UserAgent, cfg.Cookie, cfg.HTTPTimeout)
 	movieClient := kanata.NewClient(cfg.KanataMovieTubeBaseURL, httpClient)
+	movieMetadataClient := tmdb.NewClient(cfg.TMDBBaseURL, cfg.TMDBReadToken, cfg.TMDBAPIKey, httpClient)
 	manhwaClient := manhwaindo.NewClient(cfg.ManhwaindoBaseURL, cfg.ManhwaindoUserAgent, cfg.ManhwaindoCookie, cfg.HTTPTimeout)
 	komikuClient := komiku.NewClient(cfg.KomikuBaseURL, cfg.KomikuUserAgent, cfg.KomikuCookie, cfg.HTTPTimeout)
 	return snapshot.DefaultCollectors(
 		movieClient,
+		movieMetadataClient,
 		animeFetcher,
 		cfg.CatalogURL,
 		manhwaindo.NewService(manhwaClient, cfg.ManhwaindoBaseURL),

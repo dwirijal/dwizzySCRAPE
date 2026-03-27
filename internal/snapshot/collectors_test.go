@@ -6,12 +6,20 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/dwirijal/dwizzySCRAPE/internal/kanata"
+	"github.com/dwirijal/dwizzySCRAPE/internal/tmdb"
 )
 
 type testBuildCollector struct {
 	domain string
 	build  func(ctx Context, writer *Writer, options BuildOptions) error
 	patch  func(ctx Context, writer *Writer, slug string, options BuildOptions) error
+}
+
+type fakeMovieMetadataClient struct {
+	enabled bool
+	search  func(ctx context.Context, query string, year, limit int) ([]tmdb.SearchHit, error)
 }
 
 func (c testBuildCollector) Domain() string {
@@ -30,6 +38,17 @@ func (c testBuildCollector) Patch(ctx Context, writer *Writer, slug string, opti
 		return c.patch(ctx, writer, slug, options)
 	}
 	return nil
+}
+
+func (c fakeMovieMetadataClient) Enabled() bool {
+	return c.enabled
+}
+
+func (c fakeMovieMetadataClient) SearchMovies(ctx context.Context, query string, year, limit int) ([]tmdb.SearchHit, error) {
+	if c.search != nil {
+		return c.search(ctx, query, year, limit)
+	}
+	return nil, nil
 }
 
 func TestBuildPackContinuesOnCollectorFailure(t *testing.T) {
@@ -80,5 +99,33 @@ func TestBuildPackFailsWhenAllCollectorsFail(t *testing.T) {
 		OutputDir: root,
 	}); err == nil {
 		t.Fatal("expected error when all collectors fail")
+	}
+}
+
+func TestMovieCollectorEnrichMovieCardsWithTMDBPoster(t *testing.T) {
+	collector := &MovieCollector{
+		MetadataClient: fakeMovieMetadataClient{
+			enabled: true,
+			search: func(ctx context.Context, query string, year, limit int) ([]tmdb.SearchHit, error) {
+				return []tmdb.SearchHit{{
+					Title:       "War Machine",
+					ReleaseDate: "2026-01-01",
+					PosterPath:  "/war-machine.jpg",
+				}}, nil
+			},
+		},
+	}
+
+	items := collector.enrichMovieCards(context.Background(), []kanata.HomeMovie{{
+		Slug:  "war-machine-2026",
+		Title: "War Machine",
+		Year:  "2026",
+	}})
+
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(items))
+	}
+	if items[0].Poster != "https://image.tmdb.org/t/p/w500/war-machine.jpg" {
+		t.Fatalf("unexpected poster %q", items[0].Poster)
 	}
 }
