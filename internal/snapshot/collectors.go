@@ -2,7 +2,9 @@ package snapshot
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
@@ -361,15 +363,26 @@ func BuildPack(ctx Context, collectors []Collector, options BuildOptions) (Manif
 	if err := osEnsureDir(options.OutputDir); err != nil {
 		return Manifest{}, err
 	}
+	var buildWarnings []error
 	for _, collector := range collectors {
 		if collector == nil {
 			continue
 		}
 		if err := collector.Build(ctx, writer, options); err != nil {
-			return Manifest{}, err
+			wrapped := fmt.Errorf("%s build failed: %w", collector.Domain(), err)
+			buildWarnings = append(buildWarnings, wrapped)
+			fmt.Fprintf(os.Stderr, "snapshot warning: %v\n", wrapped)
+			continue
 		}
 	}
-	return WriteManifest(options.OutputDir, options.GeneratedAt)
+	manifest, err := WriteManifest(options.OutputDir, options.GeneratedAt)
+	if err != nil {
+		return Manifest{}, err
+	}
+	if len(manifest.Entries) == 0 && len(buildWarnings) > 0 {
+		return Manifest{}, errors.Join(buildWarnings...)
+	}
+	return manifest, nil
 }
 
 func PatchPack(ctx Context, collectors []Collector, domain, slug string, options BuildOptions) (Manifest, error) {
