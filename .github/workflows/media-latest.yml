@@ -48,11 +48,6 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Install dwizzyWEEB dependencies
-        if: ${{ env.DWIZZYWEEB_PUSH_TOKEN != '' }}
-        working-directory: ${{ github.workspace }}/dwizzyWEEB
-        run: npm ci
-
       - name: Run latest scrape loop
         run: ./scripts/cron-media-latest.sh
 

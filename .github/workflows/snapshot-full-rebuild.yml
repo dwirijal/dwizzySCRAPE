@@ -47,11 +47,6 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Install dwizzyWEEB dependencies
-        if: ${{ env.DWIZZYWEEB_PUSH_TOKEN != '' }}
-        working-directory: ${{ github.workspace }}/dwizzyWEEB
-        run: npm ci
-
       - name: Refresh read models
         run: ./scripts/cron-media-maintenance.sh
 
