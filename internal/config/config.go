@@ -53,7 +53,7 @@ func Load() (Config, error) {
 		SnapshotCatalogPage:    parsePositiveInt(os.Getenv("SNAPSHOT_CATALOG_PAGE"), 1),
 		SnapshotMovieGenres:    splitCSV(os.Getenv("SNAPSHOT_MOVIE_GENRES")),
 		SnapshotMovieQueries:   splitCSV(os.Getenv("SNAPSHOT_MOVIE_SEARCH_QUERIES")),
-		PostgresURL:            strings.TrimSpace(firstNonEmpty("POSTGRES_URL", "NEON_DATABASE_URL", "DATABASE_URL")),
+		PostgresURL:            strings.TrimSpace(firstNonEmpty("POSTGRES_URL", "DATABASE_URL", "NEON_DATABASE_URL")),
 		UserAgent:              strings.TrimSpace(os.Getenv("SAMEHADAKU_USER_AGENT")),
 		Cookie:                 strings.TrimSpace(os.Getenv("SAMEHADAKU_COOKIE")),
 		HTTPTimeout:            30 * time.Second,

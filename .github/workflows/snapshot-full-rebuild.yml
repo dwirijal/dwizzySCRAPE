@@ -16,8 +16,8 @@ jobs:
   rebuild:
     runs-on: ubuntu-latest
     env:
+      POSTGRES_URL: ${{ secrets.POSTGRES_URL || secrets.NEON_DATABASE_URL }}
       NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
-      POSTGRES_URL: ${{ secrets.NEON_DATABASE_URL }}
       SAMEHADAKU_COOKIE: ${{ secrets.SAMEHADAKU_COOKIE }}
       TMDB_READ_TOKEN: ${{ secrets.TMDB_READ_TOKEN }}
       TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}

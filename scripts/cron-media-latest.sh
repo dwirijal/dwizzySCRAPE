@@ -11,9 +11,9 @@ if [[ -f "${PROJECT_DIR}/.env" ]]; then
   set +a
 fi
 
-DB_DSN="${NEON_DATABASE_URL:-${POSTGRES_URL:-${DATABASE_URL:-}}}"
+DB_DSN="${POSTGRES_URL:-${DATABASE_URL:-${NEON_DATABASE_URL:-}}}"
 if [[ -z "${DB_DSN}" ]]; then
-  echo "[cron-media-latest] missing DB DSN (NEON_DATABASE_URL/POSTGRES_URL/DATABASE_URL)" >&2
+  echo "[cron-media-latest] missing DB DSN (POSTGRES_URL/DATABASE_URL; NEON_DATABASE_URL is compatibility fallback)" >&2
   exit 1
 fi
 

@@ -7,7 +7,7 @@ Current scope:
 - source: `Samehadaku`
 - catalog: `https://v2.samehadaku.how/daftar-anime-2/`
 - storage model: current-state only
-- destination: lean Postgres/Neon canonical media tables
+- destination: lean local Postgres canonical media tables
 - stored fields: title, canonical URL, slug, poster URL, anime type, status, score, views, synopsis excerpt, genres, timestamps
 Compact v2 additive read model:
 
@@ -53,11 +53,17 @@ go run ./cmd/dwizzyscrape snapshot-webhook patch anime ao-no-orchestra-season-2 
 ## Bootstrapping
 
 ```bash
+docker compose -f docker-compose.local.yml up -d
 cp .env.example .env
 source .env
 go run ./cmd/dwizzyscrape migrate
 go run ./cmd/dwizzyscrape backfill
 ```
+
+The local bootstrap stack exposes:
+
+- Postgres on `127.0.0.1:5432`
+- Valkey on `127.0.0.1:6379`
 
 ## Scheduling (Cron)
 
@@ -101,6 +107,7 @@ The repo now supports free CI scheduling with two workflows:
 
 Expected GitHub secrets for CI:
 
+- `POSTGRES_URL` preferred when CI uses a reachable Postgres
 - `NEON_DATABASE_URL`
 - `SAMEHADAKU_COOKIE` when needed
 - `TMDB_READ_TOKEN` or `TMDB_API_KEY` when movie enrichment is enabled
@@ -120,11 +127,12 @@ CI flow:
 Runtime ownership:
 
 - `Supabase` is for auth/account flows only
-- `dwizzySCRAPE` may write media directly to `Postgres` / `Neon`
+- `dwizzySCRAPE` writes media directly to `Postgres`
 - public apps should read anime/movie content through `api.dwizzy.my.id`, not from Neon or Supabase directly
 
-- `NEON_DATABASE_URL` recommended as primary runtime database DSN
-- `POSTGRES_URL` (or `DATABASE_URL`) supported as compatibility fallback
+- `POSTGRES_URL` recommended as primary runtime database DSN
+- `DATABASE_URL` supported as compatibility alias
+- `NEON_DATABASE_URL` supported only as compatibility fallback while local Postgres is being rolled out
 - `SAMEHADAKU_CATALOG_URL` optional, defaults to `https://v2.samehadaku.how/daftar-anime-2/`
 - `SAMEHADAKU_COOKIE` optional, only needed when Cloudflare challenge blocks anonymous requests
 - `SAMEHADAKU_USER_AGENT` optional
@@ -154,7 +162,7 @@ Keep `SAMEHADAKU_COOKIE` as a fallback for days when Cloudflare starts challengi
 
 ## Storage note
 
-Active anime/movie/media sync writes directly to `NEON_DATABASE_URL` (or `POSTGRES_URL` fallback).
+Active anime/movie/media sync writes directly to `POSTGRES_URL` (or `DATABASE_URL` alias). `NEON_DATABASE_URL` is kept only as a compatibility fallback during migration.
 No Supabase management API path is required for media ingestion in this service.
 
 Only root-level files in `sql/*.sql` are replayed during migrate/refresh.

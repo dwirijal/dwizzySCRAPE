@@ -1036,7 +1036,7 @@ func firstNonEmptyArgOrEnv(args []string, index int, envKey, fallback string) st
 
 func openContentDB(ctx context.Context, cfg config.Config) (*store.PgxContentDB, error) {
 	if strings.TrimSpace(cfg.PostgresURL) == "" {
-		return nil, fmt.Errorf("NEON_DATABASE_URL (or POSTGRES_URL / DATABASE_URL) is required for content sync")
+		return nil, fmt.Errorf("POSTGRES_URL is required for content sync (NEON_DATABASE_URL supported as compatibility fallback)")
 	}
 	return store.NewPgxContentDB(ctx, cfg.PostgresURL)
 }
