@@ -15,7 +15,12 @@ if [[ -f "${PROJECT_DIR}/.env" ]]; then
   set +a
 fi
 
-if [[ -x "${PROJECT_DIR}/.bin/dwizzyscrape" ]]; then
+if [[ "${DWIZZYSCRAPE_USE_GO_RUN:-0}" == "1" ]]; then
+  DWIZZY_CMD=(go run ./cmd/dwizzyscrape)
+elif [[ -n "${DWIZZYSCRAPE_CMD:-}" ]]; then
+  # shellcheck disable=SC2206
+  DWIZZY_CMD=(${DWIZZYSCRAPE_CMD})
+elif [[ -x "${PROJECT_DIR}/.bin/dwizzyscrape" ]]; then
   DWIZZY_CMD=("${PROJECT_DIR}/.bin/dwizzyscrape")
 else
   DWIZZY_CMD=(go run ./cmd/dwizzyscrape)

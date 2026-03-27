@@ -90,6 +90,7 @@ Notes:
 - `publish-weeb-snapshots.sh` bridges the raw snapshot pack into `dwizzyWEEB/public/snapshots/current` by calling `dwizzyWEEB/scripts/build-snapshot-bundle.mjs`.
 - `push-weeb-snapshot-bundle.sh` stages only `public/snapshots/current` in a checked-out `dwizzyWEEB` repo, commits it, and can push it to trigger Vercel deploy.
 - Tune limits and behavior with env vars (examples): `ANIME_RECENT_LIMIT`, `MANHWA_CATALOG_PAGES`, `KOMIKU_CATALOG_PAGES`, `MOVIE_HOME_LIMIT`, `RESPECT_BACKFILL`.
+- Set `DWIZZYSCRAPE_USE_GO_RUN=1` when you want scripts to ignore a stale `.bin/dwizzyscrape` and execute the current source tree instead.
 
 ## GitHub Actions
 
