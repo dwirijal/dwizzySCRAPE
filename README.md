@@ -66,15 +66,18 @@ Use provided scheduler scripts:
 ```bash
 ./scripts/cron-media-latest.sh
 ./scripts/cron-media-maintenance.sh
+./scripts/list-snapshot-patch-targets.sh
 ./scripts/publish-weeb-snapshots.sh build
 ./scripts/publish-weeb-snapshots.sh patch anime ao-no-orchestra-season-2
+./scripts/publish-weeb-snapshot-patches.sh
+./scripts/push-weeb-snapshot-bundle.sh
 ```
 
 Recommended crontab:
 
 ```bash
-*/20 * * * * cd /home/dwizzy/workspace/projects/dwizzyOS/dwizzySCRAPE && /usr/bin/env bash ./scripts/cron-media-latest.sh
-15 */6 * * * cd /home/dwizzy/workspace/projects/dwizzyOS/dwizzySCRAPE && /usr/bin/env bash ./scripts/cron-media-maintenance.sh
+*/15 * * * * cd /home/dwizzy/workspace/projects/dwizzyOS/dwizzySCRAPE && /usr/bin/env bash ./scripts/cron-media-latest.sh && /usr/bin/env bash ./scripts/cron-media-maintenance.sh && /usr/bin/env bash ./scripts/publish-weeb-snapshot-patches.sh
+15 */6 * * * cd /home/dwizzy/workspace/projects/dwizzyOS/dwizzySCRAPE && /usr/bin/env bash ./scripts/publish-weeb-snapshots.sh build
 ```
 
 Notes:
@@ -82,8 +85,34 @@ Notes:
 - `cron-media-latest.sh` does incremental fetch from Samehadaku, Manhwaindo, Komiku, and Kanata movie home.
 - It uses lock file (`/tmp/dwizzyscrape-cron-media-latest.lock`) to avoid overlap and can skip when backfill job is running.
 - `cron-media-maintenance.sh` refreshes SQL read models (`refresh-anime-v2`, `refresh-media-v2`, `refresh-movie-v3`).
+- `list-snapshot-patch-targets.sh` queries the read model for titles updated recently and emits `domain slug touched_at` rows.
+- `publish-weeb-snapshot-patches.sh` loops over recent patch targets and refreshes only the affected snapshot docs.
 - `publish-weeb-snapshots.sh` bridges the raw snapshot pack into `dwizzyWEEB/public/snapshots/current` by calling `dwizzyWEEB/scripts/build-snapshot-bundle.mjs`.
+- `push-weeb-snapshot-bundle.sh` stages only `public/snapshots/current` in a checked-out `dwizzyWEEB` repo, commits it, and can push it to trigger Vercel deploy.
 - Tune limits and behavior with env vars (examples): `ANIME_RECENT_LIMIT`, `MANHWA_CATALOG_PAGES`, `KOMIKU_CATALOG_PAGES`, `MOVIE_HOME_LIMIT`, `RESPECT_BACKFILL`.
+
+## GitHub Actions
+
+The repo now supports free CI scheduling with two workflows:
+
+- `media-latest.yml`: every 15 minutes, runs incremental scrape + read-model refresh + snapshot patch publish
+- `snapshot-full-rebuild.yml`: every 6 hours, rebuilds the full hot-media snapshot pack
+
+Expected GitHub secrets for CI:
+
+- `NEON_DATABASE_URL`
+- `SAMEHADAKU_COOKIE` when needed
+- `TMDB_READ_TOKEN` or `TMDB_API_KEY` when movie enrichment is enabled
+- `DWIZZYWEEB_PUSH_TOKEN` if the workflow should push updated snapshot bundles into `dwirijal/dwizzyWEEB`
+
+CI flow:
+
+1. Checkout `dwizzySCRAPE`
+2. Optionally checkout `dwizzyWEEB`
+3. Run scrape/refresh jobs
+4. Build or patch snapshots
+5. Commit only `public/snapshots/current` in `dwizzyWEEB`
+6. Push to `main` to trigger Vercel auto-deploy
 
 ## Environment
 

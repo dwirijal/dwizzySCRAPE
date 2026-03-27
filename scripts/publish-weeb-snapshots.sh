@@ -6,6 +6,7 @@ PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 RAW_OUTPUT_DIR="${SNAPSHOT_OUTPUT_DIR:-${PROJECT_DIR}/.snapshots/raw}"
 WEEB_DIR="${DWIZZYWEEB_DIR:-${PROJECT_DIR}/../dwizzyWEEB}"
 WEEB_OUTPUT_DIR="${DWIZZYWEEB_SNAPSHOT_TARGET_DIR:-${WEEB_DIR}/public/snapshots/current}"
+BUILD_BUNDLE="${DWIZZYWEEB_BUILD_BUNDLE:-1}"
 
 if [[ -f "${PROJECT_DIR}/.env" ]]; then
   set -a
@@ -42,6 +43,16 @@ case "${MODE}" in
     exit 1
     ;;
 esac
+
+if [[ "${BUILD_BUNDLE}" != "1" ]]; then
+  echo "skipped snapshot bundle build because DWIZZYWEEB_BUILD_BUNDLE=${BUILD_BUNDLE}"
+  exit 0
+fi
+
+if [[ ! -f "${WEEB_DIR}/scripts/build-snapshot-bundle.mjs" ]]; then
+  echo "skipped snapshot bundle build because ${WEEB_DIR}/scripts/build-snapshot-bundle.mjs is unavailable"
+  exit 0
+fi
 
 node "${WEEB_DIR}/scripts/build-snapshot-bundle.mjs" "${RAW_OUTPUT_DIR}" "${WEEB_OUTPUT_DIR}"
 echo "published snapshot bundle to ${WEEB_OUTPUT_DIR}"

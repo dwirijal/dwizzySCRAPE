@@ -37,11 +37,8 @@ func (c *AnimeCollector) Domain() string {
 }
 
 func (c *AnimeCollector) Build(ctx Context, writer *Writer, options BuildOptions) error {
-	items, err := c.fetchCatalog(ctx, options.CatalogPage)
+	items, err := c.writeDomainDocs(ctx, writer, options)
 	if err != nil {
-		return err
-	}
-	if _, err := writer.Write(c.Domain(), KindCatalog, fmt.Sprintf("page-%d", options.CatalogPage), items); err != nil {
 		return err
 	}
 	for _, item := range limitAnimeCatalog(items, options.HotLimit) {
@@ -57,7 +54,22 @@ func (c *AnimeCollector) Patch(ctx Context, writer *Writer, slug string, _ Build
 	if slug == "" {
 		return fmt.Errorf("anime patch slug is required")
 	}
+	if _, err := c.writeDomainDocs(ctx, writer, BuildOptions{}); err != nil {
+		return err
+	}
 	return c.writeTitleAndPlayback(ctx, writer, slug, nil)
+}
+
+func (c *AnimeCollector) writeDomainDocs(ctx Context, writer *Writer, options BuildOptions) ([]samehadaku.CatalogItem, error) {
+	options = normalizeOptions(options)
+	items, err := c.fetchCatalog(ctx, options.CatalogPage)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := writer.Write(c.Domain(), KindCatalog, fmt.Sprintf("page-%d", options.CatalogPage), items); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func (c *AnimeCollector) fetchCatalog(ctx context.Context, page int) ([]samehadaku.CatalogItem, error) {
@@ -194,15 +206,28 @@ func (c *MovieCollector) Domain() string {
 }
 
 func (c *MovieCollector) Build(ctx Context, writer *Writer, options BuildOptions) error {
+	hot, err := c.writeDomainDocs(ctx, writer, options)
+	if err != nil {
+		return err
+	}
+	for _, item := range hot {
+		if err := c.writeTitleAndPlayback(ctx, writer, item.Slug); err != nil {
+			continue
+		}
+	}
+	return nil
+}
+
+func (c *MovieCollector) writeDomainDocs(ctx Context, writer *Writer, options BuildOptions) ([]kanata.HomeMovie, error) {
 	if c.Client == nil {
-		return fmt.Errorf("movie client is required")
+		return nil, fmt.Errorf("movie client is required")
 	}
 	home, err := c.Client.GetHome(ctx)
 	if err != nil {
-		return fmt.Errorf("fetch movie home: %w", err)
+		return nil, fmt.Errorf("fetch movie home: %w", err)
 	}
 	if _, err := writer.Write(c.Domain(), KindHome, "hot", home); err != nil {
-		return err
+		return nil, err
 	}
 
 	genres := normalizedGenres(options.MovieGenres)
@@ -212,7 +237,7 @@ func (c *MovieCollector) Build(ctx Context, writer *Writer, options BuildOptions
 			continue
 		}
 		if _, err := writer.Write(c.Domain(), KindCatalog, fmt.Sprintf("genre-%s-page-%d", genre, options.CatalogPage), items); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -223,22 +248,19 @@ func (c *MovieCollector) Build(ctx Context, writer *Writer, options BuildOptions
 			continue
 		}
 		if _, err := writer.Write(c.Domain(), KindSearch, query, items); err != nil {
-			return err
+			return nil, err
 		}
 	}
-
-	for _, item := range hot {
-		if err := c.writeTitleAndPlayback(ctx, writer, item.Slug); err != nil {
-			continue
-		}
-	}
-	return nil
+	return hot, nil
 }
 
 func (c *MovieCollector) Patch(ctx Context, writer *Writer, slug string, _ BuildOptions) error {
 	slug = strings.TrimSpace(slug)
 	if slug == "" {
 		return fmt.Errorf("movie patch slug is required")
+	}
+	if _, err := c.writeDomainDocs(ctx, writer, BuildOptions{}); err != nil {
+		return err
 	}
 	return c.writeTitleAndPlayback(ctx, writer, slug)
 }
@@ -276,14 +298,8 @@ func (c *ReadingCollector) Domain() string {
 }
 
 func (c *ReadingCollector) Build(ctx Context, writer *Writer, options BuildOptions) error {
-	if c.service == nil {
-		return fmt.Errorf("%s service is required", c.domain)
-	}
-	items, err := c.service.FetchCatalog(ctx, options.CatalogPage)
+	items, err := c.writeDomainDocs(ctx, writer, options)
 	if err != nil {
-		return fmt.Errorf("fetch %s catalog: %w", c.domain, err)
-	}
-	if _, err := writer.Write(c.Domain(), KindCatalog, fmt.Sprintf("page-%d", options.CatalogPage), items); err != nil {
 		return err
 	}
 	for _, item := range limitSeries(items, options.HotLimit) {
@@ -294,10 +310,27 @@ func (c *ReadingCollector) Build(ctx Context, writer *Writer, options BuildOptio
 	return nil
 }
 
+func (c *ReadingCollector) writeDomainDocs(ctx Context, writer *Writer, options BuildOptions) ([]content.ManhwaSeries, error) {
+	if c.service == nil {
+		return nil, fmt.Errorf("%s service is required", c.domain)
+	}
+	items, err := c.service.FetchCatalog(ctx, options.CatalogPage)
+	if err != nil {
+		return nil, fmt.Errorf("fetch %s catalog: %w", c.domain, err)
+	}
+	if _, err := writer.Write(c.Domain(), KindCatalog, fmt.Sprintf("page-%d", options.CatalogPage), items); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 func (c *ReadingCollector) Patch(ctx Context, writer *Writer, slug string, _ BuildOptions) error {
 	slug = strings.TrimSpace(slug)
 	if slug == "" {
 		return fmt.Errorf("%s patch slug is required", c.domain)
+	}
+	if _, err := c.writeDomainDocs(ctx, writer, BuildOptions{}); err != nil {
+		return err
 	}
 	return c.writeTitleAndPlayback(ctx, writer, slug)
 }

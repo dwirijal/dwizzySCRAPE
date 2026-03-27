@@ -29,29 +29,11 @@ func (c *DonghuaCollector) Build(ctx Context, writer *Writer, options BuildOptio
 	}
 	defer db.Close()
 
-	page := options.CatalogPage
-	if page <= 0 {
-		page = 1
-	}
-	limit := maxInt(options.HotLimit*3, 24)
-	catalog, err := c.listCatalog(ctx, db, page, limit)
+	catalog, err := c.writeDomainDocs(ctx, db, writer, options)
 	if err != nil {
 		return err
 	}
-	hot := catalog
-	if len(hot) > maxInt(options.HotLimit, 8) {
-		hot = hot[:maxInt(options.HotLimit, 8)]
-	}
-
-	if _, err := writer.Write(c.Domain(), KindHome, "hot", map[string]any{
-		"latest_updates": hot,
-		"ongoing_series": hot,
-	}); err != nil {
-		return err
-	}
-	if _, err := writer.Write(c.Domain(), KindCatalog, fmt.Sprintf("page-%d", page), catalog); err != nil {
-		return err
-	}
+	hot := limitDonghuaHot(catalog, options.HotLimit)
 	for _, item := range hot {
 		if err := c.writeTitleAndPlayback(ctx, db, writer, item.Slug); err != nil {
 			continue
@@ -66,7 +48,34 @@ func (c *DonghuaCollector) Patch(ctx Context, writer *Writer, slug string, _ Bui
 		return err
 	}
 	defer db.Close()
+	if _, err := c.writeDomainDocs(ctx, db, writer, BuildOptions{}); err != nil {
+		return err
+	}
 	return c.writeTitleAndPlayback(ctx, db, writer, strings.TrimSpace(slug))
+}
+
+func (c *DonghuaCollector) writeDomainDocs(ctx context.Context, db *pgxpool.Pool, writer *Writer, options BuildOptions) ([]donghuaCatalogItem, error) {
+	options = normalizeOptions(options)
+	page := options.CatalogPage
+	if page <= 0 {
+		page = 1
+	}
+	limit := maxInt(options.HotLimit*3, 24)
+	catalog, err := c.listCatalog(ctx, db, page, limit)
+	if err != nil {
+		return nil, err
+	}
+	hot := limitDonghuaHot(catalog, options.HotLimit)
+	if _, err := writer.Write(c.Domain(), KindHome, "hot", map[string]any{
+		"latest_updates": hot,
+		"ongoing_series": hot,
+	}); err != nil {
+		return nil, err
+	}
+	if _, err := writer.Write(c.Domain(), KindCatalog, fmt.Sprintf("page-%d", page), catalog); err != nil {
+		return nil, err
+	}
+	return catalog, nil
 }
 
 type donghuaCatalogItem struct {
@@ -291,6 +300,14 @@ ORDER BY g.label ASC
 		series.Episodes = episodes
 	}
 	return series, nil
+}
+
+func limitDonghuaHot(items []donghuaCatalogItem, limit int) []donghuaCatalogItem {
+	normalizedLimit := maxInt(limit, 8)
+	if len(items) <= normalizedLimit {
+		return append([]donghuaCatalogItem(nil), items...)
+	}
+	return append([]donghuaCatalogItem(nil), items[:normalizedLimit]...)
 }
 
 func (c *DonghuaCollector) listEpisodes(ctx context.Context, db *pgxpool.Pool, slug string) ([]episodeRecord, error) {

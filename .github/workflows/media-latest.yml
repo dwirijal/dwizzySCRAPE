@@ -1,0 +1,71 @@
+name: media-latest
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: media-latest
+  cancel-in-progress: false
+
+jobs:
+  scrape-and-patch:
+    runs-on: ubuntu-latest
+    env:
+      NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+      POSTGRES_URL: ${{ secrets.NEON_DATABASE_URL }}
+      SAMEHADAKU_COOKIE: ${{ secrets.SAMEHADAKU_COOKIE }}
+      TMDB_READ_TOKEN: ${{ secrets.TMDB_READ_TOKEN }}
+      TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+      DWIZZYWEEB_PUSH_TOKEN: ${{ secrets.DWIZZYWEEB_PUSH_TOKEN }}
+      DWIZZYWEEB_PUSH_SNAPSHOT_BUNDLE: "1"
+      DWIZZYWEEB_PUSH: "1"
+      DWIZZYWEEB_BRANCH: main
+      DWIZZYWEEB_GIT_COMMIT_MESSAGE: "chore: update media snapshots"
+    steps:
+      - name: Checkout dwizzySCRAPE
+        uses: actions/checkout@v4
+
+      - name: Checkout dwizzyWEEB
+        if: ${{ env.DWIZZYWEEB_PUSH_TOKEN != '' }}
+        uses: actions/checkout@v4
+        with:
+          repository: dwirijal/dwizzyWEEB
+          token: ${{ secrets.DWIZZYWEEB_PUSH_TOKEN }}
+          path: dwizzyWEEB
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dwizzyWEEB dependencies
+        if: ${{ env.DWIZZYWEEB_PUSH_TOKEN != '' }}
+        working-directory: ${{ github.workspace }}/dwizzyWEEB
+        run: npm ci
+
+      - name: Run latest scrape loop
+        run: ./scripts/cron-media-latest.sh
+
+      - name: Refresh read models
+        run: ./scripts/cron-media-maintenance.sh
+
+      - name: Publish snapshot patches
+        env:
+          DWIZZYWEEB_DIR: ${{ github.workspace }}/dwizzyWEEB
+        run: ./scripts/publish-weeb-snapshot-patches.sh
+
+      - name: Push snapshot bundle
+        if: ${{ env.DWIZZYWEEB_PUSH_TOKEN != '' }}
+        env:
+          DWIZZYWEEB_DIR: ${{ github.workspace }}/dwizzyWEEB
+        run: ./scripts/push-weeb-snapshot-bundle.sh

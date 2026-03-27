@@ -22,6 +22,9 @@ func (c fakeCollector) Build(_ Context, writer *Writer, _ BuildOptions) error {
 }
 
 func (c fakeCollector) Patch(_ Context, writer *Writer, slug string, _ BuildOptions) error {
+	if _, err := writer.Write(c.domain, KindCatalog, "page-1", map[string]any{"ok": true, "patched": true}); err != nil {
+		return err
+	}
 	if _, err := writer.Write(c.domain, KindTitle, slug, map[string]any{"slug": slug}); err != nil {
 		return err
 	}
@@ -64,10 +67,11 @@ func TestPatchPackWritesManifestForSingleDomain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PatchPack() error = %v", err)
 	}
-	if len(manifest.Entries) != 2 {
-		t.Fatalf("expected 2 entries, got %d", len(manifest.Entries))
+	if len(manifest.Entries) != 3 {
+		t.Fatalf("expected 3 entries, got %d", len(manifest.Entries))
 	}
 	for _, rel := range []string{
+		"movie/catalog/page-1.json",
 		"movie/title/war-machine.json",
 		"movie/playback/war-machine.json",
 	} {
