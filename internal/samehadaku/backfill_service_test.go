@@ -137,3 +137,66 @@ func TestEpisodeBackfillServiceContinuesOnPerSlugError(t *testing.T) {
 		t.Fatalf("unexpected requested slugs %#v", syncer.requested)
 	}
 }
+
+func TestEpisodeBackfillServiceFiltersIncludedSlugs(t *testing.T) {
+	catalog := &fakeCatalogBatchReader{
+		pages: map[int][]CatalogItem{
+			0: {
+				{Slug: "absolute-duo", PageNumber: 1},
+				{Slug: "ao-no-orchestra-season-2", PageNumber: 2},
+			},
+			2: {
+				{Slug: "yamada-kun-to-lv999-no-koi-wo-suru", PageNumber: 27},
+			},
+		},
+	}
+	syncer := &fakeEpisodeSyncer{}
+	service := NewEpisodeBackfillService(catalog, &fakeEpisodeAnimeSlugReader{}, syncer, time.Time{})
+
+	report, err := service.Backfill(context.Background(), EpisodeBackfillOptions{
+		BatchSize:    2,
+		IncludeSlugs: []string{"ao-no-orchestra-season-2", "yamada-kun-to-lv999-no-koi-wo-suru"},
+	})
+	if err != nil {
+		t.Fatalf("Backfill returned error: %v", err)
+	}
+	if report.Discovered != 2 {
+		t.Fatalf("expected 2 discovered, got %d", report.Discovered)
+	}
+	if report.Attempted != 2 {
+		t.Fatalf("expected 2 attempted, got %d", report.Attempted)
+	}
+	if !slices.Equal(syncer.requested, []string{"ao-no-orchestra-season-2", "yamada-kun-to-lv999-no-koi-wo-suru"}) {
+		t.Fatalf("unexpected requested slugs %#v", syncer.requested)
+	}
+}
+
+func TestEpisodeBackfillServiceSkipsMovies(t *testing.T) {
+	catalog := &fakeCatalogBatchReader{
+		pages: map[int][]CatalogItem{
+			0: {
+				{Slug: "suzume-no-tojimari", PageNumber: 1, ContentType: "movie", AnimeType: "Movie"},
+				{Slug: "ao-no-orchestra-season-2", PageNumber: 2, ContentType: "anime", AnimeType: "TV"},
+			},
+		},
+	}
+	syncer := &fakeEpisodeSyncer{}
+	service := NewEpisodeBackfillService(catalog, &fakeEpisodeAnimeSlugReader{}, syncer, time.Time{})
+
+	report, err := service.Backfill(context.Background(), EpisodeBackfillOptions{BatchSize: 2})
+	if err != nil {
+		t.Fatalf("Backfill returned error: %v", err)
+	}
+	if report.Discovered != 1 {
+		t.Fatalf("expected 1 discovered, got %d", report.Discovered)
+	}
+	if report.Skipped != 1 {
+		t.Fatalf("expected 1 skipped, got %d", report.Skipped)
+	}
+	if report.Succeeded != 1 {
+		t.Fatalf("expected 1 succeeded, got %d", report.Succeeded)
+	}
+	if !slices.Equal(syncer.requested, []string{"ao-no-orchestra-season-2"}) {
+		t.Fatalf("unexpected requested slugs %#v", syncer.requested)
+	}
+}

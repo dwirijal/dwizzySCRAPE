@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -24,6 +25,9 @@ type ContentStore struct {
 	db contentDB
 }
 
+var embeddedDatePattern = regexp.MustCompile(`\b((?:19|20)\d{2}-\d{2}-\d{2})\b`)
+var embeddedTimestampPattern = regexp.MustCompile(`\b((?:19|20)\d{2}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+\-]\d{2}:\d{2}))\b`)
+
 func NewContentStore(db contentDB) *ContentStore {
 	return &ContentStore{db: db}
 }
@@ -36,70 +40,33 @@ func (s *ContentStore) UpsertManhwaSeries(ctx context.Context, series content.Ma
 		return fmt.Errorf("series slug is required")
 	}
 	sourceKey := normalizeSourceKey(series.Source)
-
-	var titleID int64
-	if err := s.db.QueryRow(ctx, `
-INSERT INTO content_titles (
-	media_type, slug, title, alt_title, canonical_url, cover_url, status, release_year, author, synopsis, latest_unit_slug, updated_at
-) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
-ON CONFLICT (media_type, slug)
-DO UPDATE SET
-	title = EXCLUDED.title,
-	alt_title = EXCLUDED.alt_title,
-	canonical_url = EXCLUDED.canonical_url,
-	cover_url = EXCLUDED.cover_url,
-	status = EXCLUDED.status,
-	release_year = EXCLUDED.release_year,
-	author = EXCLUDED.author,
-	synopsis = EXCLUDED.synopsis,
-	latest_unit_slug = EXCLUDED.latest_unit_slug,
-	updated_at = NOW()
-RETURNING id
-`, "manhwa", series.Slug, series.Title, emptyToNil(series.AltTitle), series.CanonicalURL, emptyToNil(series.CoverURL), normalizeStatus(series.Status), emptyToNil(series.ReleasedYear), emptyToNil(series.Author), emptyToNil(series.Synopsis), latestSlug(series.LatestChapter)).Scan(&titleID); err != nil {
-		return fmt.Errorf("upsert content_titles: %w", err)
+	mediaType := normalizeReadingMediaType(sourceKey, series.MediaType)
+	itemKey := mediaItemKey(sourceKey, mediaType, series.Slug)
+	genres := normalizeSeriesGenres(sourceKey, series.Genres)
+	detailJSON, err := json.Marshal(map[string]any{
+		"alt_title":            strings.TrimSpace(series.AltTitle),
+		"canonical_url":        series.CanonicalURL,
+		"author":               strings.TrimSpace(series.Author),
+		"synopsis":             strings.TrimSpace(series.Synopsis),
+		"genres":               genres,
+		"latest_unit_slug":     latestSlug(series.LatestChapter),
+		"latest_chapter_label": latestChapterLabel(series.LatestChapter),
+		"type":                 strings.TrimSpace(series.Type),
+		"source":               sourceKey,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal series detail: %w", err)
 	}
-
 	if err := s.db.Exec(ctx, `
-INSERT INTO content_source_links (title_id, source_key, source_slug, canonical_url, last_scraped_at)
-VALUES ($1,$2,$3,$4,NOW())
-ON CONFLICT (source_key, source_slug)
-DO UPDATE SET
-	title_id = EXCLUDED.title_id,
-	canonical_url = EXCLUDED.canonical_url,
-	last_scraped_at = NOW()
-`, titleID, sourceKey, series.Slug, series.CanonicalURL); err != nil {
-		return fmt.Errorf("upsert content_source_links: %w", err)
-	}
-
-	if err := s.db.Exec(ctx, `DELETE FROM content_title_genres WHERE title_id = $1`, titleID); err != nil {
-		return fmt.Errorf("clear title genres: %w", err)
-	}
-	for _, genre := range series.Genres {
-		genre = strings.TrimSpace(genre)
-		if genre == "" {
-			continue
-		}
-		var genreID int64
-		if err := s.db.QueryRow(ctx, `
-INSERT INTO content_genres (slug, label)
-VALUES ($1,$2)
-ON CONFLICT (slug)
-DO UPDATE SET label = EXCLUDED.label
-RETURNING id
-`, slugifyGenre(genre), genre).Scan(&genreID); err != nil {
-			return fmt.Errorf("upsert content_genres: %w", err)
-		}
-		if err := s.db.Exec(ctx, `
-INSERT INTO content_title_genres (title_id, genre_id)
-VALUES ($1,$2)
-ON CONFLICT (title_id, genre_id) DO NOTHING
-`, titleID, genreID); err != nil {
-			return fmt.Errorf("insert content_title_genres: %w", err)
-		}
+SELECT public.upsert_media_item(
+	$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb
+)
+`, itemKey, sourceKey, mediaType, series.Slug, series.Title, strings.TrimSpace(series.CoverURL), normalizeStatus(series.Status), parseReleaseYear(series.ReleasedYear), float32(0), nil, nil, detailJSON); err != nil {
+		return fmt.Errorf("upsert media_items: %w", err)
 	}
 
 	for idx, chapter := range series.Chapters {
-		if err := s.upsertChapterSummary(ctx, titleID, idx, chapter); err != nil {
+		if err := s.upsertChapterSummary(ctx, itemKey, sourceKey, idx, chapter); err != nil {
 			return err
 		}
 	}
@@ -119,63 +86,67 @@ func (s *ContentStore) UpsertManhwaChapter(ctx context.Context, chapter content.
 	}
 	sourceKey := normalizeSourceKey(chapter.Source)
 
-	pagesJSON, err := json.Marshal(chapter.Pages)
+	pagesJSON, err := json.Marshal(map[string]any{
+		"pages":        chapter.Pages,
+		"series_slug":  strings.TrimSpace(chapter.SeriesSlug),
+		"series_title": strings.TrimSpace(chapter.SeriesTitle),
+	})
 	if err != nil {
 		return fmt.Errorf("marshal pages json: %w", err)
 	}
 
-	var unitID int64
-	if err := s.db.QueryRow(ctx, `
-INSERT INTO content_units (
-	title_id, unit_type, slug, title, label, number_label, canonical_url, prev_unit_slug, next_unit_slug, pages_json, updated_at
-)
-SELECT source_links.title_id, 'chapter', $3, $4, $5, $6, $7, $8, $9, $10::jsonb, NOW()
-FROM content_source_links AS source_links
-WHERE source_links.source_key = $1
-  AND source_links.source_slug = $2
-ON CONFLICT (slug)
-DO UPDATE SET
-	title = EXCLUDED.title,
-	label = EXCLUDED.label,
-	number_label = EXCLUDED.number_label,
-	canonical_url = EXCLUDED.canonical_url,
-	prev_unit_slug = EXCLUDED.prev_unit_slug,
-	next_unit_slug = EXCLUDED.next_unit_slug,
-	pages_json = EXCLUDED.pages_json,
-	updated_at = NOW()
-RETURNING id
-`, sourceKey, chapter.SeriesSlug, chapter.Slug, chapter.Title, chapter.Label, chapter.Number, chapter.CanonicalURL, unitSlugFromURL(chapter.PrevURL), unitSlugFromURL(chapter.NextURL), pagesJSON).Scan(&unitID); err != nil {
-		return fmt.Errorf("upsert content_units chapter detail: %w", err)
+	itemKey, err := s.resolveSeriesItemKey(ctx, sourceKey, chapter.SeriesSlug)
+	if err != nil {
+		return err
 	}
-	if unitID == 0 {
-		return fmt.Errorf("upsert content_units chapter detail: no matching title for source=%q slug=%q", sourceKey, chapter.SeriesSlug)
+	if err := s.db.Exec(ctx, `
+SELECT public.upsert_media_unit(
+	$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb
+)
+`, mediaUnitKey(sourceKey, "chapter", chapter.Slug), itemKey, sourceKey, "chapter", chapter.Slug, chapter.Title, chapter.Label, chapterSequenceIndex(chapter.Number, 0), chapter.CanonicalURL, nil, unitSlugFromURL(chapter.PrevURL), unitSlugFromURL(chapter.NextURL), pagesJSON); err != nil {
+		return fmt.Errorf("upsert media_units chapter detail: %w", err)
 	}
 
 	return nil
 }
 
-func (s *ContentStore) upsertChapterSummary(ctx context.Context, titleID int64, index int, chapter content.ManhwaChapterRef) error {
+func (s *ContentStore) resolveSeriesItemKey(ctx context.Context, sourceKey, seriesSlug string) (string, error) {
+	if s.db == nil {
+		return "", fmt.Errorf("content db is required")
+	}
+	seriesSlug = strings.TrimSpace(seriesSlug)
+	if seriesSlug == "" {
+		return "", fmt.Errorf("series slug is required")
+	}
+
+	var itemKey string
+	err := s.db.QueryRow(ctx, `
+SELECT item_key
+FROM public.media_items
+WHERE source = $1 AND slug = $2
+ORDER BY updated_at DESC
+LIMIT 1
+`, sourceKey, seriesSlug).Scan(&itemKey)
+	if err == nil && strings.TrimSpace(itemKey) != "" {
+		return strings.TrimSpace(itemKey), nil
+	}
+
+	mediaType := normalizeReadingMediaType(sourceKey, "")
+	return mediaItemKey(sourceKey, mediaType, seriesSlug), nil
+}
+
+func (s *ContentStore) upsertChapterSummary(ctx context.Context, itemKey, sourceKey string, index int, chapter content.ManhwaChapterRef) error {
 	if strings.TrimSpace(chapter.Slug) == "" {
 		return nil
 	}
 	sequenceIndex := chapterSequenceIndex(chapter.Number, index)
 	publishedAt := normalizePublishedAt(chapter.PublishedAt)
 	if err := s.db.Exec(ctx, `
-INSERT INTO content_units (
-	title_id, unit_type, slug, title, label, number_label, sequence_index, canonical_url, published_at, updated_at
-) VALUES ($1,'chapter',$2,$3,$4,$5,$6,$7,NULLIF($8, '')::timestamptz,NOW())
-ON CONFLICT (slug)
-DO UPDATE SET
-	title_id = EXCLUDED.title_id,
-	title = EXCLUDED.title,
-	label = EXCLUDED.label,
-	number_label = EXCLUDED.number_label,
-	sequence_index = EXCLUDED.sequence_index,
-	canonical_url = EXCLUDED.canonical_url,
-	published_at = EXCLUDED.published_at,
-	updated_at = NOW()
-`, titleID, chapter.Slug, emptyToNil(chapter.Title), chapter.Label, chapter.Number, sequenceIndex, chapter.CanonicalURL, publishedAt); err != nil {
-		return fmt.Errorf("upsert content_units chapter summary: %w", err)
+SELECT public.upsert_media_unit(
+	$1, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, '')::timestamptz, NULL, NULL, $11::jsonb
+)
+`, mediaUnitKey(sourceKey, "chapter", chapter.Slug), itemKey, sourceKey, "chapter", chapter.Slug, stringValue(chapter.Title), chapter.Label, sequenceIndex, chapter.CanonicalURL, publishedAt, []byte(`{}`)); err != nil {
+		return fmt.Errorf("upsert media_units chapter summary: %w", err)
 	}
 	return nil
 }
@@ -187,6 +158,13 @@ func latestSlug(chapter *content.ManhwaChapterRef) any {
 	return emptyToNil(chapter.Slug)
 }
 
+func latestChapterLabel(chapter *content.ManhwaChapterRef) any {
+	if chapter == nil {
+		return nil
+	}
+	return emptyToNil(chapter.Label)
+}
+
 func emptyToNil(value string) any {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -195,12 +173,36 @@ func emptyToNil(value string) any {
 	return value
 }
 
+func stringValue(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case []byte:
+		return strings.TrimSpace(string(typed))
+	default:
+		return ""
+	}
+}
+
 func normalizeStatus(status string) any {
 	status = strings.ToLower(strings.TrimSpace(status))
 	if status == "" {
 		return nil
 	}
 	return status
+}
+
+func parseReleaseYear(raw string) any {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < 1800 || value > 9999 {
+		return nil
+	}
+	year := int16(value)
+	return year
 }
 
 func slugifyGenre(value string) string {
@@ -285,6 +287,8 @@ func normalizePublishedAt(raw string) string {
 		time.RFC3339,
 		"02/01/2006",
 		"2/1/2006",
+		"January 2, 2006",
+		"Jan 2, 2006",
 		"2 January 2006",
 		"02 January 2006",
 		"2 Jan 2006",
@@ -300,14 +304,74 @@ func normalizePublishedAt(raw string) string {
 	return ""
 }
 
+func normalizePublishedAtFromEmbeddedDate(raw string) string {
+	match := embeddedDatePattern.FindStringSubmatch(strings.TrimSpace(raw))
+	if len(match) < 2 {
+		return ""
+	}
+	return normalizePublishedAt(match[1])
+}
+
+func normalizePublishedAtFromEmbeddedTimestamp(raw string) string {
+	match := embeddedTimestampPattern.FindStringSubmatch(strings.TrimSpace(raw))
+	if len(match) < 2 {
+		return ""
+	}
+	return normalizePublishedAt(match[1])
+}
+
 func normalizeSourceKey(raw string) string {
 	value := strings.ToLower(strings.TrimSpace(raw))
 	switch value {
+	case "bacaman":
+		return "bacaman"
+	case "mangasusuku":
+		return "mangasusuku"
+	case "kanzenin":
+		return "kanzenin"
 	case "komiku":
 		return "komiku"
 	case "manhwaindo":
 		return "manhwaindo"
 	default:
 		return "manhwaindo"
+	}
+}
+
+func normalizeSeriesGenres(sourceKey string, genres []string) []string {
+	normalized := make([]string, 0, len(genres)+1)
+	seen := make(map[string]struct{}, len(genres)+1)
+
+	for _, genre := range genres {
+		genre = strings.TrimSpace(genre)
+		if genre == "" {
+			continue
+		}
+		key := strings.ToLower(genre)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		normalized = append(normalized, genre)
+	}
+
+	if sourceKey == "kanzenin" || sourceKey == "mangasusuku" {
+		if _, ok := seen["nsfw"]; !ok {
+			normalized = append(normalized, "nsfw")
+		}
+	}
+
+	return normalized
+}
+
+func normalizeReadingMediaType(sourceKey, raw string) string {
+	raw = strings.ToLower(strings.TrimSpace(raw))
+	switch {
+	case raw != "":
+		return raw
+	case sourceKey == "komiku":
+		return "komiku"
+	default:
+		return "manhwa"
 	}
 }

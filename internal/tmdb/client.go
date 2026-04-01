@@ -35,6 +35,17 @@ type SearchHit struct {
 	VoteAverage   float64 `json:"vote_average"`
 }
 
+type SeriesSearchHit struct {
+	ID               int      `json:"id"`
+	Name             string   `json:"name"`
+	OriginalName     string   `json:"original_name"`
+	FirstAirDate     string   `json:"first_air_date"`
+	PosterPath       string   `json:"poster_path"`
+	VoteAverage      float64  `json:"vote_average"`
+	OriginalLanguage string   `json:"original_language"`
+	OriginCountry    []string `json:"origin_country"`
+}
+
 type MatchReason string
 
 const (
@@ -55,6 +66,10 @@ type searchResponse struct {
 	Results []SearchHit `json:"results"`
 }
 
+type seriesSearchResponse struct {
+	Results []SeriesSearchHit `json:"results"`
+}
+
 type MovieDetail struct {
 	ID               int     `json:"id"`
 	Title            string  `json:"title"`
@@ -68,6 +83,48 @@ type MovieDetail struct {
 	Tagline          string  `json:"tagline"`
 	Status           string  `json:"status"`
 	OriginalLanguage string  `json:"original_language"`
+	Genres           []struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	} `json:"genres"`
+	ProductionCountries []struct {
+		Name string `json:"name"`
+	} `json:"production_countries"`
+	Videos struct {
+		Results []struct {
+			Name     string `json:"name"`
+			Key      string `json:"key"`
+			Site     string `json:"site"`
+			Type     string `json:"type"`
+			Official bool   `json:"official"`
+		} `json:"results"`
+	} `json:"videos"`
+	Credits struct {
+		Cast []struct {
+			Name      string `json:"name"`
+			Character string `json:"character"`
+		} `json:"cast"`
+		Crew []struct {
+			Name string `json:"name"`
+			Job  string `json:"job"`
+		} `json:"crew"`
+	} `json:"credits"`
+}
+
+type SeriesDetail struct {
+	ID               int      `json:"id"`
+	Name             string   `json:"name"`
+	OriginalName     string   `json:"original_name"`
+	Overview         string   `json:"overview"`
+	PosterPath       string   `json:"poster_path"`
+	BackdropPath     string   `json:"backdrop_path"`
+	FirstAirDate     string   `json:"first_air_date"`
+	VoteAverage      float64  `json:"vote_average"`
+	Tagline          string   `json:"tagline"`
+	Status           string   `json:"status"`
+	OriginalLanguage string   `json:"original_language"`
+	OriginCountry    []string `json:"origin_country"`
+	EpisodeRunTime   []int    `json:"episode_run_time"`
 	Genres           []struct {
 		ID   int    `json:"id"`
 		Name string `json:"name"`
@@ -171,6 +228,61 @@ func (c *Client) GetMovieDetail(ctx context.Context, movieID int) (MovieDetail, 
 	return detail, nil
 }
 
+func (c *Client) SearchTV(ctx context.Context, query string, year, limit int) ([]SeriesSearchHit, error) {
+	if !c.Enabled() {
+		return nil, fmt.Errorf("tmdb credentials are not configured")
+	}
+	endpoint, err := url.Parse(c.baseURL + "/search/tv")
+	if err != nil {
+		return nil, fmt.Errorf("build tmdb tv search endpoint: %w", err)
+	}
+	params := endpoint.Query()
+	params.Set("query", strings.TrimSpace(query))
+	params.Set("include_adult", "false")
+	if year > 0 {
+		params.Set("first_air_date_year", strconv.Itoa(year))
+	}
+	if c.apiKey != "" && c.readToken == "" {
+		params.Set("api_key", c.apiKey)
+	}
+	endpoint.RawQuery = params.Encode()
+
+	var parsed seriesSearchResponse
+	if err := c.getJSON(ctx, endpoint.String(), &parsed); err != nil {
+		return nil, err
+	}
+	results := parsed.Results
+	if limit > 0 && len(results) > limit {
+		results = results[:limit]
+	}
+	return results, nil
+}
+
+func (c *Client) GetTVDetail(ctx context.Context, tvID int) (SeriesDetail, error) {
+	if !c.Enabled() {
+		return SeriesDetail{}, fmt.Errorf("tmdb credentials are not configured")
+	}
+	if tvID <= 0 {
+		return SeriesDetail{}, fmt.Errorf("tmdb tv id must be positive")
+	}
+	endpoint, err := url.Parse(fmt.Sprintf("%s/tv/%d", c.baseURL, tvID))
+	if err != nil {
+		return SeriesDetail{}, fmt.Errorf("build tmdb tv detail endpoint: %w", err)
+	}
+	params := endpoint.Query()
+	params.Set("append_to_response", "videos,credits")
+	if c.apiKey != "" && c.readToken == "" {
+		params.Set("api_key", c.apiKey)
+	}
+	endpoint.RawQuery = params.Encode()
+
+	var detail SeriesDetail
+	if err := c.getJSON(ctx, endpoint.String(), &detail); err != nil {
+		return SeriesDetail{}, err
+	}
+	return detail, nil
+}
+
 func (c *Client) getJSON(ctx context.Context, rawURL string, target any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
@@ -239,6 +351,48 @@ func PickBestMovieMatchResult(query string, year int, results []SearchHit) Match
 	return out
 }
 
+type SeriesMatchResult struct {
+	Hit            SeriesSearchHit
+	Matched        bool
+	Reason         MatchReason
+	BestScore      int
+	CandidateCount int
+}
+
+func PickBestSeriesMatchResult(query string, year int, results []SeriesSearchHit) SeriesMatchResult {
+	out := SeriesMatchResult{
+		Reason:         MatchReasonSearchEmpty,
+		CandidateCount: len(results),
+	}
+	if len(results) == 0 {
+		return out
+	}
+
+	target := normalizeTitle(query)
+	type scoredHit struct {
+		hit   SeriesSearchHit
+		score int
+	}
+
+	scored := make([]scoredHit, 0, len(results))
+	for _, result := range results {
+		score := scoreSeriesHit(target, year, result)
+		scored = append(scored, scoredHit{hit: result, score: score})
+	}
+	sort.SliceStable(scored, func(i, j int) bool {
+		return scored[i].score > scored[j].score
+	})
+	out.BestScore = scored[0].score
+	if scored[0].score <= 0 {
+		out.Reason = MatchReasonScoreRejected
+		return out
+	}
+	out.Hit = scored[0].hit
+	out.Matched = true
+	out.Reason = MatchReasonMatched
+	return out
+}
+
 func scoreHit(target string, year int, result SearchHit) int {
 	candidates := []string{
 		result.Title,
@@ -247,6 +401,43 @@ func scoreHit(target string, year int, result SearchHit) int {
 	}
 
 	resultYear := extractYear(result.ReleaseDate)
+	best := 0
+	for _, candidate := range candidates {
+		value := normalizeTitle(candidate)
+		if value == "" {
+			continue
+		}
+
+		score := 0
+		switch {
+		case value == target:
+			score = 100
+		case strings.Contains(value, target) || strings.Contains(target, value):
+			score = 70
+		case sharedTokens(target, value) >= 2:
+			score = 40 + sharedTokens(target, value)
+		}
+		if year > 0 && resultYear == year {
+			score += 20
+		}
+		if year > 0 && resultYear > 0 && abs(year-resultYear) == 1 {
+			score += 5
+		}
+		if score > best {
+			best = score
+		}
+	}
+	return best
+}
+
+func scoreSeriesHit(target string, year int, result SeriesSearchHit) int {
+	candidates := []string{
+		result.Name,
+		result.OriginalName,
+		path.Base(strings.TrimSpace(result.PosterPath)),
+	}
+
+	resultYear := extractYear(result.FirstAirDate)
 	best := 0
 	for _, candidate := range candidates {
 		value := normalizeTitle(candidate)

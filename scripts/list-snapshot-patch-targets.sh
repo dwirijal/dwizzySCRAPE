@@ -11,9 +11,9 @@ if [[ -f "${PROJECT_DIR}/.env" ]]; then
   set +a
 fi
 
-DB_DSN="${POSTGRES_URL:-${DATABASE_URL:-${NEON_DATABASE_URL:-}}}"
+DB_DSN="${DATABASE_URL:-${POSTGRES_URL:-${NEON_DATABASE_URL:-}}}"
 if [[ -z "${DB_DSN}" ]]; then
-  echo "[list-snapshot-patch-targets] missing DB DSN (POSTGRES_URL/DATABASE_URL; NEON_DATABASE_URL is compatibility fallback)" >&2
+  echo "[list-snapshot-patch-targets] missing DB DSN (DATABASE_URL; POSTGRES_URL/NEON_DATABASE_URL are compatibility fallbacks)" >&2
   exit 1
 fi
 
@@ -26,11 +26,15 @@ psql "${DB_DSN}" -At -F $'\t' -v ON_ERROR_STOP=1 \
 WITH recent_anime AS (
   SELECT
     'anime' AS domain,
-    l.slug,
-    GREATEST(l.updated_at, COALESCE(MAX(e.updated_at), l.updated_at)) AS touched_at
-  FROM anime_list l
-  LEFT JOIN anime_episodes e ON e.anime_slug = l.slug
-  GROUP BY l.slug, l.updated_at
+    i.slug,
+    GREATEST(i.updated_at, COALESCE(MAX(u.updated_at), i.updated_at)) AS touched_at
+  FROM media_items i
+  LEFT JOIN media_units u
+    ON u.item_key = i.item_key
+   AND u.unit_type = 'episode'
+  WHERE i.source = 'samehadaku'
+    AND i.media_type = 'anime'
+  GROUP BY i.slug, i.updated_at
 ),
 ranked_anime AS (
   SELECT
@@ -44,20 +48,13 @@ ranked_anime AS (
 recent_movies AS (
   SELECT
     'movie' AS domain,
-    m.slug,
-    GREATEST(
-      m.updated_at,
-      COALESCE(mm.updated_at, m.updated_at),
-      COALESCE(MAX(pr.updated_at), m.updated_at),
-      COALESCE(MAX(wo.updated_at), m.updated_at),
-      COALESCE(MAX(d.updated_at), m.updated_at)
-    ) AS touched_at
-  FROM movies m
-  LEFT JOIN movie_meta mm ON mm.tmdb_id = m.tmdb_id
-  LEFT JOIN movie_provider_records pr ON pr.tmdb_id = m.tmdb_id
-  LEFT JOIN movie_watch_options wo ON wo.provider_record_id = pr.id
-  LEFT JOIN movie_download_options d ON d.provider_record_id = pr.id
-  GROUP BY m.slug, m.updated_at, mm.updated_at
+    i.slug,
+    GREATEST(i.updated_at, COALESCE(MAX(u.updated_at), i.updated_at)) AS touched_at
+  FROM media_items i
+  LEFT JOIN media_units u
+    ON u.item_key = i.item_key
+  WHERE i.media_type = 'movie'
+  GROUP BY i.slug, i.updated_at
 ),
 ranked_movies AS (
   SELECT
@@ -70,20 +67,15 @@ ranked_movies AS (
 ),
 recent_reading AS (
   SELECT
-    l.source_key AS domain,
-    l.source_slug AS slug,
-    GREATEST(
-      t.updated_at,
-      COALESCE(MAX(u.updated_at), t.updated_at),
-      COALESCE(MAX(l.last_scraped_at), t.updated_at)
-    ) AS touched_at
-  FROM content_titles t
-  JOIN content_source_links l
-    ON l.title_id = t.id
-   AND l.source_key IN ('manhwaindo', 'komiku')
-  LEFT JOIN content_units u ON u.title_id = t.id
-  WHERE t.media_type IN ('manga', 'manhwa', 'manhua')
-  GROUP BY l.source_key, l.source_slug, t.updated_at
+    i.source AS domain,
+    i.slug AS slug,
+    GREATEST(i.updated_at, COALESCE(MAX(u.updated_at), i.updated_at)) AS touched_at
+  FROM media_items i
+  LEFT JOIN media_units u
+    ON u.item_key = i.item_key
+   AND u.unit_type = 'chapter'
+  WHERE i.source IN ('manhwaindo', 'komiku')
+  GROUP BY i.source, i.slug, i.updated_at
 ),
 ranked_reading AS (
   SELECT
@@ -97,14 +89,14 @@ ranked_reading AS (
 recent_donghua AS (
   SELECT
     'donghua' AS domain,
-    t.slug,
-    GREATEST(t.updated_at, COALESCE(MAX(u.updated_at), t.updated_at)) AS touched_at
-  FROM content_titles t
-  LEFT JOIN content_units u
-    ON u.title_id = t.id
+    i.slug,
+    GREATEST(i.updated_at, COALESCE(MAX(u.updated_at), i.updated_at)) AS touched_at
+  FROM media_items i
+  LEFT JOIN media_units u
+    ON u.item_key = i.item_key
    AND u.unit_type = 'episode'
-  WHERE t.media_type = 'donghua'
-  GROUP BY t.slug, t.updated_at
+  WHERE i.media_type = 'donghua'
+  GROUP BY i.slug, i.updated_at
 ),
 ranked_donghua AS (
   SELECT

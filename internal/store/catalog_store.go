@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/dwirijal/dwizzySCRAPE/internal/samehadaku"
 )
@@ -44,15 +45,12 @@ func (s *CatalogStore) UpsertCatalog(ctx context.Context, items []samehadaku.Cat
 		return 0, nil
 	}
 	if s.db != nil {
-		payload, err := json.Marshal(items)
-		if err != nil {
-			return 0, fmt.Errorf("encode rpc payload: %w", err)
+		for _, item := range items {
+			if err := s.upsertCatalogItemWithDB(ctx, item); err != nil {
+				return 0, err
+			}
 		}
-		var affected int
-		if err := s.db.QueryRow(ctx, `SELECT public.upsert_samehadaku_catalog_v2($1::jsonb)`, payload).Scan(&affected); err != nil {
-			return 0, fmt.Errorf("execute upsert_samehadaku_catalog_v2: %w", err)
-		}
-		return affected, nil
+		return len(items), nil
 	}
 	if s.client == nil {
 		return 0, fmt.Errorf("http client is required")
@@ -64,21 +62,95 @@ func (s *CatalogStore) UpsertCatalog(ctx context.Context, items []samehadaku.Cat
 		return 0, fmt.Errorf("supabase secret key is required")
 	}
 
-	endpoint, err := url.Parse(s.supabaseURL + "/rest/v1/rpc/upsert_samehadaku_catalog_v2")
-	if err != nil {
-		return 0, fmt.Errorf("build rpc endpoint: %w", err)
+	for _, item := range items {
+		if err := s.upsertCatalogItemHTTP(ctx, item); err != nil {
+			return 0, err
+		}
 	}
 
-	payload, err := json.Marshal(map[string]any{
-		"payload": items,
-	})
+	return len(items), nil
+}
+
+func (s *CatalogStore) upsertCatalogItemWithDB(ctx context.Context, item samehadaku.CatalogItem) error {
+	mediaType := samehadakuMediaType(item.ContentType, item.AnimeType)
+	itemKey := mediaItemKey("samehadaku", mediaType, item.Slug)
+	detailMap := annotateSamehadakuDetail(map[string]any{
+		"canonical_url":    item.CanonicalURL,
+		"source_domain":    item.SourceDomain,
+		"content_type":     item.ContentType,
+		"page_number":      item.PageNumber,
+		"poster_url":       item.PosterURL,
+		"anime_type":       item.AnimeType,
+		"type_code":        animeTypeCode(item.AnimeType),
+		"status_label":     item.Status,
+		"views":            item.Views,
+		"synopsis":         item.SynopsisExcerpt,
+		"synopsis_excerpt": item.SynopsisExcerpt,
+		"genres":           item.Genres,
+		"scraped_at":       item.ScrapedAt.UTC().Format(time.RFC3339Nano),
+	}, item.Slug, item.Title)
+	detail, err := json.Marshal(detailMap)
 	if err != nil {
-		return 0, fmt.Errorf("encode rpc payload: %w", err)
+		return fmt.Errorf("encode media detail: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint.String(), bytes.NewReader(payload))
+	if err := s.db.Exec(ctx, `
+SELECT public.upsert_media_item(
+	$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb
+)
+`, itemKey, "samehadaku", mediaType, item.Slug, item.Title, item.PosterURL, item.Status, nil, float32(item.Score), nil, nil, detail); err != nil {
+		return fmt.Errorf("execute upsert_media_item: %w", err)
+	}
+	if err := upsertMediaTaxonomy(ctx, s.db, itemKey, ClassifyMediaItem("samehadaku", mediaType, detailMap)); err != nil {
+		return fmt.Errorf("update media taxonomy: %w", err)
+	}
+	return nil
+}
+
+func (s *CatalogStore) upsertCatalogItemHTTP(ctx context.Context, item samehadaku.CatalogItem) error {
+	endpoint, err := url.Parse(s.supabaseURL + "/rest/v1/rpc/upsert_media_item")
 	if err != nil {
-		return 0, fmt.Errorf("build upsert request: %w", err)
+		return fmt.Errorf("build rpc endpoint: %w", err)
+	}
+
+	mediaType := samehadakuMediaType(item.ContentType, item.AnimeType)
+	payload := map[string]any{
+		"p_item_key":   mediaItemKey("samehadaku", mediaType, item.Slug),
+		"p_source":     "samehadaku",
+		"p_media_type": mediaType,
+		"p_slug":       item.Slug,
+		"p_title":      item.Title,
+		"p_cover_url":  item.PosterURL,
+		"p_status":     item.Status,
+		"p_year":       nil,
+		"p_score":      item.Score,
+		"p_mal_id":     nil,
+		"p_tmdb_id":    nil,
+		"p_detail": annotateSamehadakuDetail(map[string]any{
+			"canonical_url":    item.CanonicalURL,
+			"source_domain":    item.SourceDomain,
+			"content_type":     item.ContentType,
+			"page_number":      item.PageNumber,
+			"poster_url":       item.PosterURL,
+			"anime_type":       item.AnimeType,
+			"type_code":        animeTypeCode(item.AnimeType),
+			"status_label":     item.Status,
+			"views":            item.Views,
+			"synopsis":         item.SynopsisExcerpt,
+			"synopsis_excerpt": item.SynopsisExcerpt,
+			"genres":           item.Genres,
+			"scraped_at":       item.ScrapedAt.UTC().Format(time.RFC3339Nano),
+		}, item.Slug, item.Title),
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("encode rpc payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint.String(), bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("build upsert request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("apikey", s.secretKey)
@@ -86,19 +158,18 @@ func (s *CatalogStore) UpsertCatalog(ctx context.Context, items []samehadaku.Cat
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return 0, fmt.Errorf("perform rpc request: %w", err)
+		return fmt.Errorf("perform rpc request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return 0, fmt.Errorf("read rpc response: %w", err)
+		return fmt.Errorf("read rpc response: %w", err)
 	}
 	if resp.StatusCode >= 300 {
-		return 0, fmt.Errorf("supabase rpc failed with status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return fmt.Errorf("supabase rpc failed with status %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
 	}
-
-	return len(items), nil
+	return nil
 }
 
 func (s *CatalogStore) GetCatalogBySlug(ctx context.Context, slug string) (samehadaku.CatalogItem, error) {
@@ -111,9 +182,16 @@ func (s *CatalogStore) GetCatalogBySlug(ctx context.Context, slug string) (sameh
 		if err := s.db.QueryRow(ctx, `
 SELECT COALESCE(json_agg(row_to_json(q)), '[]'::json)::text
 FROM (
-    SELECT title, slug, canonical_url, page_number
-    FROM public.anime_catalog_sync_v2_view
-    WHERE slug = $1
+    SELECT
+        title,
+        slug,
+        COALESCE(detail->>'canonical_url', '') AS canonical_url,
+        COALESCE((detail->>'page_number')::integer, 0) AS page_number,
+        COALESCE(detail->>'content_type', media_type) AS content_type,
+        COALESCE(detail->>'anime_type', '') AS anime_type
+    FROM public.media_items
+    WHERE source = 'samehadaku'
+      AND slug = $1
     LIMIT 1
 ) q
 `, slug).Scan(&payload); err != nil {
@@ -138,11 +216,13 @@ FROM (
 	if s.secretKey == "" {
 		return samehadaku.CatalogItem{}, fmt.Errorf("supabase secret key is required")
 	}
-	endpoint, err := url.Parse(s.supabaseURL + "/rest/v1/anime_catalog_sync_v2_view")
+	endpoint, err := url.Parse(s.supabaseURL + "/rest/v1/media_items")
 	if err != nil {
 		return samehadaku.CatalogItem{}, fmt.Errorf("build select endpoint: %w", err)
 	}
 	query := endpoint.Query()
+	query.Set("select", "title,slug,detail")
+	query.Set("source", "eq.samehadaku")
 	query.Set("slug", "eq."+slug)
 	query.Set("limit", "1")
 	endpoint.RawQuery = query.Encode()
@@ -169,14 +249,18 @@ FROM (
 		return samehadaku.CatalogItem{}, fmt.Errorf("supabase select failed with status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
-	var items []samehadaku.CatalogItem
-	if err := json.Unmarshal(body, &items); err != nil {
+	var rows []struct {
+		Title  string          `json:"title"`
+		Slug   string          `json:"slug"`
+		Detail json.RawMessage `json:"detail"`
+	}
+	if err := json.Unmarshal(body, &rows); err != nil {
 		return samehadaku.CatalogItem{}, fmt.Errorf("decode select response: %w", err)
 	}
-	if len(items) == 0 {
+	if len(rows) == 0 {
 		return samehadaku.CatalogItem{}, fmt.Errorf("catalog slug %q not found", slug)
 	}
-	return items[0], nil
+	return decodeCatalogItemRow(rows[0].Title, rows[0].Slug, rows[0].Detail), nil
 }
 
 func (s *CatalogStore) ListCatalogSlugs(ctx context.Context, offset, limit int) ([]samehadaku.CatalogItem, error) {
@@ -192,8 +276,13 @@ func (s *CatalogStore) ListCatalogSlugs(ctx context.Context, offset, limit int) 
 		if err := s.db.QueryRow(ctx, `
 SELECT COALESCE(json_agg(row_to_json(q)), '[]'::json)::text
 FROM (
-    SELECT slug, page_number
-    FROM public.anime_catalog_sync_v2_view
+    SELECT
+        slug,
+        COALESCE((detail->>'page_number')::integer, 0) AS page_number,
+        COALESCE(detail->>'content_type', media_type) AS content_type,
+        COALESCE(detail->>'anime_type', '') AS anime_type
+    FROM public.media_items
+    WHERE source = 'samehadaku'
     ORDER BY page_number ASC, slug ASC
     LIMIT $1 OFFSET $2
 ) q
@@ -223,13 +312,14 @@ FROM (
 		return nil, fmt.Errorf("offset must be non-negative")
 	}
 
-	endpoint, err := url.Parse(s.supabaseURL + "/rest/v1/anime_catalog_sync_v2_view")
+	endpoint, err := url.Parse(s.supabaseURL + "/rest/v1/media_items")
 	if err != nil {
 		return nil, fmt.Errorf("build list endpoint: %w", err)
 	}
 	query := endpoint.Query()
-	query.Set("select", "slug,page_number")
-	query.Set("order", "page_number.asc,slug.asc")
+	query.Set("select", "slug,detail")
+	query.Set("source", "eq.samehadaku")
+	query.Set("order", "slug.asc")
 	query.Set("limit", fmt.Sprintf("%d", limit))
 	query.Set("offset", fmt.Sprintf("%d", offset))
 	endpoint.RawQuery = query.Encode()
@@ -256,9 +346,66 @@ FROM (
 		return nil, fmt.Errorf("supabase list failed with status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
-	var items []samehadaku.CatalogItem
-	if err := json.Unmarshal(body, &items); err != nil {
+	var rows []struct {
+		Slug   string          `json:"slug"`
+		Detail json.RawMessage `json:"detail"`
+	}
+	if err := json.Unmarshal(body, &rows); err != nil {
 		return nil, fmt.Errorf("decode list response: %w", err)
 	}
+
+	items := make([]samehadaku.CatalogItem, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, decodeCatalogItemRow("", row.Slug, row.Detail))
+	}
 	return items, nil
+}
+
+func decodeCatalogItemRow(title, slug string, detailRaw json.RawMessage) samehadaku.CatalogItem {
+	var detail struct {
+		CanonicalURL string `json:"canonical_url"`
+		PageNumber   int    `json:"page_number"`
+		ContentType  string `json:"content_type"`
+		AnimeType    string `json:"anime_type"`
+	}
+	_ = json.Unmarshal(detailRaw, &detail)
+	return samehadaku.CatalogItem{
+		Title:        title,
+		Slug:         slug,
+		CanonicalURL: detail.CanonicalURL,
+		PageNumber:   detail.PageNumber,
+		ContentType:  detail.ContentType,
+		AnimeType:    detail.AnimeType,
+	}
+}
+
+func mediaItemKey(source, mediaType, slug string) string {
+	return strings.ToLower(strings.TrimSpace(source)) + ":" + strings.ToLower(strings.TrimSpace(mediaType)) + ":" + strings.TrimSpace(slug)
+}
+
+func animeTypeCode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "tv":
+		return "t"
+	case "movie":
+		return "m"
+	case "ova":
+		return "o"
+	case "ona":
+		return "n"
+	case "special":
+		return "p"
+	default:
+		return ""
+	}
+}
+
+func samehadakuMediaType(contentType, animeType string) string {
+	if strings.EqualFold(strings.TrimSpace(contentType), "movie") {
+		return "movie"
+	}
+	if strings.EqualFold(strings.TrimSpace(animeType), "movie") {
+		return "movie"
+	}
+	return "anime"
 }

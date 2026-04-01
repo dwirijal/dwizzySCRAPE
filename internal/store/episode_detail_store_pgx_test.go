@@ -37,25 +37,25 @@ func TestEpisodeDetailStoreUpsertWithDB(t *testing.T) {
 	}
 
 	store := NewEpisodeDetailStoreWithDB(&stubContentDB{
-		queryRowFn: func(ctx context.Context, query string, args ...any) rowScanner {
-			if !strings.Contains(query, "upsert_samehadaku_episode_v2") {
+		execFn: func(ctx context.Context, query string, args ...any) error {
+			if !strings.Contains(query, "upsert_media_unit") {
 				t.Fatalf("unexpected query %q", query)
 			}
-			payload, ok := args[0].([]byte)
-			if !ok {
-				t.Fatalf("expected []byte payload, got %T", args[0])
+			if got := args[9]; got != "2025-10-05T00:00:00Z" {
+				t.Fatalf("unexpected published_at %#v", got)
 			}
-			var rows []map[string]any
-			if err := json.Unmarshal(payload, &rows); err != nil {
+			payload, ok := args[12].([]byte)
+			if !ok {
+				t.Fatalf("expected []byte payload, got %T", args[12])
+			}
+			var row map[string]any
+			if err := json.Unmarshal(payload, &row); err != nil {
 				t.Fatalf("decode payload: %v", err)
 			}
-			if len(rows) != 1 || rows[0]["episode_slug"] != "ao-no-orchestra-season-2-episode-1-subtitle-indonesia" {
-				t.Fatalf("unexpected payload %#v", rows)
+			if row["anime_slug"] != "ao-no-orchestra-season-2" {
+				t.Fatalf("unexpected payload %#v", row)
 			}
-			return stubRow{scanFn: func(dest ...any) error {
-				*(dest[0].(*int)) = 1
-				return nil
-			}}
+			return nil
 		},
 	})
 
@@ -71,8 +71,11 @@ func TestEpisodeDetailStoreUpsertWithDB(t *testing.T) {
 func TestEpisodeDetailStoreListAnimeSlugsWithDB(t *testing.T) {
 	store := NewEpisodeDetailStoreWithDB(&stubContentDB{
 		queryRowFn: func(ctx context.Context, query string, args ...any) rowScanner {
-			if !strings.Contains(query, "FROM public.anime_stream_ready_v2_view") {
+			if !strings.Contains(query, "FROM public.media_units") {
 				t.Fatalf("unexpected query %q", query)
+			}
+			if !strings.Contains(query, "detail->>'anime_slug'") {
+				t.Fatalf("expected anime_slug projection in query %q", query)
 			}
 			return stubRow{scanFn: func(dest ...any) error {
 				*(dest[0].(*[]byte)) = []byte(`[{"anime_slug":"ao-no-orchestra-season-2"},{"anime_slug":"ao-no-orchestra-season-2"},{"anime_slug":"yamada-kun-to-lv999-no-koi-wo-suru"}]`)

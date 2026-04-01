@@ -32,29 +32,42 @@ func TestCatalogStoreUpsertWithDB(t *testing.T) {
 		},
 	}
 
+	upsertCalled := false
+	taxonomyCalled := false
 	store := NewCatalogStoreWithDB(&stubContentDB{
-		queryRowFn: func(ctx context.Context, query string, args ...any) rowScanner {
-			if !strings.Contains(query, "upsert_samehadaku_catalog_v2") {
+		execFn: func(ctx context.Context, query string, args ...any) error {
+			switch {
+			case strings.Contains(query, "upsert_media_item"):
+				upsertCalled = true
+				if len(args) != 12 {
+					t.Fatalf("expected 12 args, got %d", len(args))
+				}
+				if args[0] != "samehadaku:anime:compass2-0-animation-project" {
+					t.Fatalf("unexpected item key %#v", args[0])
+				}
+				if args[2] != "anime" {
+					t.Fatalf("unexpected media type %#v", args[2])
+				}
+				payload, ok := args[11].([]byte)
+				if !ok {
+					t.Fatalf("expected []byte payload, got %T", args[11])
+				}
+				var row map[string]any
+				if err := json.Unmarshal(payload, &row); err != nil {
+					t.Fatalf("decode payload: %v", err)
+				}
+				if row["canonical_url"] != "https://v2.samehadaku.how/anime/compass2-0-animation-project/" {
+					t.Fatalf("unexpected payload %#v", row)
+				}
+			case strings.Contains(query, "UPDATE public.media_items"):
+				taxonomyCalled = true
+				if args[1] != "series" || args[2] != "animation" || args[3] != "anime" || args[4] != "JP" {
+					t.Fatalf("unexpected taxonomy args %#v", args[1:5])
+				}
+			default:
 				t.Fatalf("expected function query, got %q", query)
 			}
-			if len(args) != 1 {
-				t.Fatalf("expected single payload argument, got %d", len(args))
-			}
-			payload, ok := args[0].([]byte)
-			if !ok {
-				t.Fatalf("expected []byte payload, got %T", args[0])
-			}
-			var rows []map[string]any
-			if err := json.Unmarshal(payload, &rows); err != nil {
-				t.Fatalf("decode payload: %v", err)
-			}
-			if len(rows) != 1 || rows[0]["slug"] != "compass2-0-animation-project" {
-				t.Fatalf("unexpected payload %#v", rows)
-			}
-			return stubRow{scanFn: func(dest ...any) error {
-				*(dest[0].(*int)) = 1
-				return nil
-			}}
+			return nil
 		},
 	})
 
@@ -65,12 +78,61 @@ func TestCatalogStoreUpsertWithDB(t *testing.T) {
 	if upserted != 1 {
 		t.Fatalf("expected 1 upserted row, got %d", upserted)
 	}
+	if !upsertCalled || !taxonomyCalled {
+		t.Fatalf("expected upsert and taxonomy update calls, got upsert=%v taxonomy=%v", upsertCalled, taxonomyCalled)
+	}
+}
+
+func TestCatalogStoreUpsertMovieWithDB(t *testing.T) {
+	items := []samehadaku.CatalogItem{{
+		Source:       "samehadaku",
+		SourceDomain: "v2.samehadaku.how",
+		ContentType:  "movie",
+		Title:        "Suzume no Tojimari",
+		CanonicalURL: "https://v2.samehadaku.how/anime/suzume-no-tojimari/",
+		Slug:         "suzume-no-tojimari",
+		PosterURL:    "https://cdn.samehadaku.example/posters/suzume.webp",
+		AnimeType:    "Movie",
+		Status:       "Completed",
+	}}
+
+	upsertCalled := false
+	taxonomyCalled := false
+	store := NewCatalogStoreWithDB(&stubContentDB{
+		execFn: func(ctx context.Context, query string, args ...any) error {
+			switch {
+			case strings.Contains(query, "upsert_media_item"):
+				upsertCalled = true
+				if args[0] != "samehadaku:movie:suzume-no-tojimari" {
+					t.Fatalf("unexpected item key %#v", args[0])
+				}
+				if args[2] != "movie" {
+					t.Fatalf("unexpected media type %#v", args[2])
+				}
+			case strings.Contains(query, "UPDATE public.media_items"):
+				taxonomyCalled = true
+				if args[1] != "movie" || args[2] != "animation" || args[3] != "anime" || args[4] != "JP" {
+					t.Fatalf("unexpected taxonomy args %#v", args[1:5])
+				}
+			default:
+				t.Fatalf("unexpected query %q", query)
+			}
+			return nil
+		},
+	})
+
+	if _, err := store.UpsertCatalog(context.Background(), items); err != nil {
+		t.Fatalf("UpsertCatalog returned error: %v", err)
+	}
+	if !upsertCalled || !taxonomyCalled {
+		t.Fatalf("expected upsert and taxonomy update calls, got upsert=%v taxonomy=%v", upsertCalled, taxonomyCalled)
+	}
 }
 
 func TestCatalogStoreGetBySlugWithDB(t *testing.T) {
 	store := NewCatalogStoreWithDB(&stubContentDB{
 		queryRowFn: func(ctx context.Context, query string, args ...any) rowScanner {
-			if !strings.Contains(query, "FROM public.anime_catalog_sync_v2_view") {
+			if !strings.Contains(query, "FROM public.media_items") {
 				t.Fatalf("unexpected query %q", query)
 			}
 			if len(args) != 1 || args[0] != "ao-no-orchestra-season-2" {
@@ -98,7 +160,7 @@ func TestCatalogStoreGetBySlugWithDB(t *testing.T) {
 func TestCatalogStoreListCatalogSlugsWithDB(t *testing.T) {
 	store := NewCatalogStoreWithDB(&stubContentDB{
 		queryRowFn: func(ctx context.Context, query string, args ...any) rowScanner {
-			if !strings.Contains(query, "FROM public.anime_catalog_sync_v2_view") {
+			if !strings.Contains(query, "FROM public.media_items") {
 				t.Fatalf("unexpected query %q", query)
 			}
 			if !strings.Contains(query, "ORDER BY page_number ASC, slug ASC") {

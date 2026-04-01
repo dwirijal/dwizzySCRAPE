@@ -40,42 +40,101 @@ func TestAnimeDetailStoreUpsertWithDB(t *testing.T) {
 		ScrapedAt:             scrapedAt,
 	}
 
+	upsertCalled := false
+	taxonomyCalled := false
 	store := NewAnimeDetailStoreWithDB(&stubContentDB{
-		queryRowFn: func(ctx context.Context, query string, args ...any) rowScanner {
-			if !strings.Contains(query, "upsert_samehadaku_anime_detail_v2") {
+		execFn: func(ctx context.Context, query string, args ...any) error {
+			switch {
+			case strings.Contains(query, "upsert_media_item"):
+				upsertCalled = true
+				if args[0] != "samehadaku:anime:ao-no-orchestra-season-2" {
+					t.Fatalf("unexpected item key %#v", args[0])
+				}
+				if args[2] != "anime" {
+					t.Fatalf("unexpected media type %#v", args[2])
+				}
+				payload, ok := args[11].([]byte)
+				if !ok {
+					t.Fatalf("expected []byte payload, got %T", args[11])
+				}
+				var row map[string]any
+				if err := json.Unmarshal(payload, &row); err != nil {
+					t.Fatalf("decode payload: %v", err)
+				}
+				if row["canonical_url"] != "https://v2.samehadaku.how/anime/ao-no-orchestra-season-2/" {
+					t.Fatalf("unexpected payload %#v", row)
+				}
+			case strings.Contains(query, "UPDATE public.media_items"):
+				taxonomyCalled = true
+				if args[1] != "series" || args[2] != "animation" || args[3] != "anime" || args[4] != "JP" {
+					t.Fatalf("unexpected taxonomy args %#v", args[1:5])
+				}
+			default:
 				t.Fatalf("unexpected query %q", query)
 			}
-			payload, ok := args[0].([]byte)
-			if !ok {
-				t.Fatalf("expected []byte payload, got %T", args[0])
-			}
-			var rows []map[string]any
-			if err := json.Unmarshal(payload, &rows); err != nil {
-				t.Fatalf("decode payload: %v", err)
-			}
-			if len(rows) != 1 || rows[0]["slug"] != "ao-no-orchestra-season-2" {
-				t.Fatalf("unexpected payload %#v", rows)
-			}
-			if _, ok := rows[0]["batch_links_json"]; !ok {
-				t.Fatalf("expected batch_links_json in payload %#v", rows[0])
-			}
-			return stubRow{scanFn: func(dest ...any) error {
-				*(dest[0].(*int)) = 1
-				return nil
-			}}
+			return nil
 		},
 	})
 
 	if err := store.UpsertAnimeDetail(context.Background(), detail); err != nil {
 		t.Fatalf("UpsertAnimeDetail returned error: %v", err)
 	}
+	if !upsertCalled || !taxonomyCalled {
+		t.Fatalf("expected upsert and taxonomy update calls, got upsert=%v taxonomy=%v", upsertCalled, taxonomyCalled)
+	}
+}
+
+func TestAnimeDetailStoreUpsertMovieWithDB(t *testing.T) {
+	detail := samehadaku.AnimeDetail{
+		Slug:            "suzume-no-tojimari",
+		SourceTitle:     "Suzume no Tojimari",
+		MALThumbnailURL: "https://cdn.myanimelist.net/images/anime/suzume.webp",
+		AnimeType:       "Movie",
+		Status:          "Finished Airing",
+		ScrapedAt:       time.Date(2026, 3, 22, 16, 0, 0, 0, time.UTC),
+	}
+
+	upsertCalled := false
+	taxonomyCalled := false
+	store := NewAnimeDetailStoreWithDB(&stubContentDB{
+		execFn: func(ctx context.Context, query string, args ...any) error {
+			switch {
+			case strings.Contains(query, "upsert_media_item"):
+				upsertCalled = true
+				if args[0] != "samehadaku:movie:suzume-no-tojimari" {
+					t.Fatalf("unexpected item key %#v", args[0])
+				}
+				if args[2] != "movie" {
+					t.Fatalf("unexpected media type %#v", args[2])
+				}
+			case strings.Contains(query, "UPDATE public.media_items"):
+				taxonomyCalled = true
+				if args[1] != "movie" || args[2] != "animation" || args[3] != "anime" || args[4] != "JP" {
+					t.Fatalf("unexpected taxonomy args %#v", args[1:5])
+				}
+			default:
+				t.Fatalf("unexpected query %q", query)
+			}
+			return nil
+		},
+	})
+
+	if err := store.UpsertAnimeDetail(context.Background(), detail); err != nil {
+		t.Fatalf("UpsertAnimeDetail returned error: %v", err)
+	}
+	if !upsertCalled || !taxonomyCalled {
+		t.Fatalf("expected upsert and taxonomy update calls, got upsert=%v taxonomy=%v", upsertCalled, taxonomyCalled)
+	}
 }
 
 func TestAnimeDetailStoreListAnimeSlugsWithDB(t *testing.T) {
 	store := NewAnimeDetailStoreWithDB(&stubContentDB{
 		queryRowFn: func(ctx context.Context, query string, args ...any) rowScanner {
-			if !strings.Contains(query, "FROM public.anime_detail_ready_v2_view") {
+			if !strings.Contains(query, "FROM public.media_items") {
 				t.Fatalf("unexpected query %q", query)
+			}
+			if !strings.Contains(query, "primary_source_url") {
+				t.Fatalf("expected detail-level filter in query %q", query)
 			}
 			return stubRow{scanFn: func(dest ...any) error {
 				*(dest[0].(*[]byte)) = []byte(`[{"slug":"ao-no-orchestra-season-2"},{"slug":"ao-no-orchestra-season-2"},{"slug":"yamada-kun-to-lv999-no-koi-wo-suru"}]`)

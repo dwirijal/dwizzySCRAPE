@@ -19,6 +19,7 @@ import (
 	"github.com/dwirijal/dwizzySCRAPE/internal/kanata"
 	"github.com/dwirijal/dwizzySCRAPE/internal/komiku"
 	"github.com/dwirijal/dwizzySCRAPE/internal/manhwaindo"
+	"github.com/dwirijal/dwizzySCRAPE/internal/nekopoi"
 	"github.com/dwirijal/dwizzySCRAPE/internal/samehadaku"
 	"github.com/dwirijal/dwizzySCRAPE/internal/snapshot"
 	"github.com/dwirijal/dwizzySCRAPE/internal/store"
@@ -33,7 +34,7 @@ func main() {
 
 func run(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: dwizzyscrape <migrate|backfill|sync|detail-anime <slug>|backfill-anime-details|detail-episodes <slug>|backfill-episodes|manhwa-catalog [page]|manhwa-series <slug>|manhwa-chapter <slug>|sync-manhwa-catalog [page]|sync-manhwa-series <slug>|sync-manhwa-chapter <slug>|backfill-manhwa-series <startPage> [endPage]|backfill-manhwa-chapters <startPage> [endPage] [latestPerSeries]|komiku-catalog [page]|komiku-series <slug>|komiku-chapter <slug>|sync-komiku-catalog [page]|sync-komiku-series <slug>|sync-komiku-chapter <slug>|backfill-komiku-series <startPage> [endPage]|backfill-komiku-chapters <startPage> [endPage] [latestPerSeries]|refresh-anime-v2|refresh-media-v2|refresh-movie-v3|sync-movie-v3-kanata-home [limit]|sync-movie-v3-kanata-genre <genre> [page] [limit]|sync-movie-v3-kanata-search <query> [page] [limit]|snapshot-build [outputDir]|snapshot-patch <domain> <slug> [outputDir]|snapshot-webhook [build|patch] [domain] [slug] [outputDir]|probe-url <url>>")
+		return fmt.Errorf("usage: dwizzyscrape <migrate|backfill|sync|sync-nekopoi-feed|detail-anime <slug>|backfill-anime-details|detail-episodes <slug>|backfill-episodes|manhwa-catalog [page]|manhwa-series <slug>|manhwa-chapter <slug>|sync-manhwa-catalog [page]|sync-manhwa-series <slug>|sync-manhwa-chapter <slug>|backfill-manhwa-series <startPage> [endPage]|backfill-manhwa-chapters <startPage> [endPage] [latestPerSeries]|komiku-catalog [page]|komiku-series <slug>|komiku-chapter <slug>|sync-komiku-catalog [page]|sync-komiku-series <slug>|sync-komiku-chapter <slug>|backfill-komiku-series <startPage> [endPage]|backfill-komiku-chapters <startPage> [endPage] [latestPerSeries]|refresh-anime|refresh-media|refresh-movies|backfill-tmdb-enrichments [all|movie|series] [limit] [batchSize]|sync-movie-kanata-home [limit]|sync-movie-kanata-genre <genre> [page] [limit]|sync-movie-kanata-search <query> [page] [limit]|snapshot-build [outputDir]|snapshot-patch <domain> <slug> [outputDir]|snapshot-webhook [build|patch] [domain] [slug] [outputDir]|probe-url <url>>")
 	}
 
 	cfg, err := config.Load()
@@ -69,6 +70,22 @@ func run(ctx context.Context, args []string) error {
 			return err
 		}
 		log.Printf("samehadaku catalog sync done: parsed=%d upserted=%d", report.Parsed, report.Upserted)
+		return nil
+	case "sync-nekopoi-feed":
+		db, err := openContentDB(ctx, cfg)
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		fetcher := nekopoi.NewClient(cfg.NekopoiUserAgent, cfg.NekopoiCookie, cfg.HTTPTimeout)
+		service := nekopoi.NewService(fetcher, cfg.NekopoiBaseURL, time.Time{})
+		sink := store.NewNekopoiStoreWithDB(db)
+
+		upserted, err := service.SyncFeed(ctx, sink)
+		if err != nil {
+			return err
+		}
+		log.Printf("nekopoi feed sync done: upserted=%d", upserted)
 		return nil
 	case "detail-anime":
 		if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
@@ -736,7 +753,7 @@ func run(ctx context.Context, args []string) error {
 			}
 		}
 		return nil
-	case "refresh-anime-v2":
+	case "refresh-anime":
 		db, err := openContentDB(ctx, cfg)
 		if err != nil {
 			return err
@@ -745,12 +762,9 @@ func run(ctx context.Context, args []string) error {
 		if err := applyMigrations(ctx, db); err != nil {
 			return err
 		}
-		if err := db.Exec(ctx, "select public.refresh_anime_v2();"); err != nil {
-			return fmt.Errorf("refresh anime v2: %w", err)
-		}
-		log.Printf("anime v2 refresh done")
+		log.Printf("anime schema replay done")
 		return nil
-	case "refresh-media-v2":
+	case "refresh-media":
 		db, err := openContentDB(ctx, cfg)
 		if err != nil {
 			return err
@@ -759,12 +773,9 @@ func run(ctx context.Context, args []string) error {
 		if err := applyMigrations(ctx, db); err != nil {
 			return err
 		}
-		if err := db.Exec(ctx, "select public.refresh_media_v2();"); err != nil {
-			return fmt.Errorf("refresh media v2: %w", err)
-		}
-		log.Printf("media v2 refresh done")
+		log.Printf("media schema replay done")
 		return nil
-	case "refresh-movie-v3":
+	case "refresh-movies":
 		db, err := openContentDB(ctx, cfg)
 		if err != nil {
 			return err
@@ -773,12 +784,103 @@ func run(ctx context.Context, args []string) error {
 		if err := applyMigrations(ctx, db); err != nil {
 			return err
 		}
-		if err := db.Exec(ctx, "select public.refresh_movie_v3();"); err != nil {
-			return fmt.Errorf("refresh movie v3: %w", err)
-		}
-		log.Printf("movie v3 refresh done")
+		log.Printf("movie schema replay done")
 		return nil
-	case "sync-movie-v3-kanata-home":
+	case "backfill-tmdb-enrichments":
+		db, err := openContentDB(ctx, cfg)
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+
+		scope := store.TMDBEnrichmentScopeAll
+		if len(args) >= 2 && strings.TrimSpace(args[1]) != "" {
+			switch strings.ToLower(strings.TrimSpace(args[1])) {
+			case "all":
+				scope = store.TMDBEnrichmentScopeAll
+			case "movie":
+				scope = store.TMDBEnrichmentScopeMovie
+			case "series":
+				scope = store.TMDBEnrichmentScopeSeries
+			default:
+				return fmt.Errorf("usage: dwizzyscrape backfill-tmdb-enrichments [all|movie|series] [limit] [batchSize]")
+			}
+		}
+
+		limit := 0
+		if len(args) >= 3 && strings.TrimSpace(args[2]) != "" {
+			parsed, err := strconv.Atoi(strings.TrimSpace(args[2]))
+			if err != nil {
+				return fmt.Errorf("parse limit: %w", err)
+			}
+			if parsed > 0 {
+				limit = parsed
+			}
+		}
+
+		batchSize := 25
+		if len(args) >= 4 && strings.TrimSpace(args[3]) != "" {
+			parsed, err := strconv.Atoi(strings.TrimSpace(args[3]))
+			if err != nil {
+				return fmt.Errorf("parse batch size: %w", err)
+			}
+			if parsed > 0 {
+				batchSize = parsed
+			}
+		}
+
+		tmdbClient := tmdb.NewClient(cfg.TMDBBaseURL, cfg.TMDBReadToken, cfg.TMDBAPIKey, httpClient)
+		candidateStore := store.NewTMDBEnrichmentCandidateStoreWithDB(db)
+		enrichmentStore := store.NewMediaItemEnrichmentStoreWithDB(db)
+		service := store.NewTMDBEnrichmentBackfillService(candidateStore, enrichmentStore, tmdbClient)
+
+		report, err := service.Backfill(ctx, store.TMDBEnrichmentBackfillOptions{
+			Scope:        scope,
+			Limit:        limit,
+			BatchSize:    batchSize,
+			SkipExisting: true,
+			DelayBetween: 250 * time.Millisecond,
+			Progress: func(progress store.TMDBEnrichmentBackfillProgress) {
+				switch progress.Action {
+				case "success":
+					log.Printf(
+						"tmdb enrichment success: slug=%s attempted=%d succeeded=%d failed=%d",
+						progress.Slug,
+						progress.Counts.Attempted,
+						progress.Counts.Succeeded,
+						progress.Counts.Failed,
+					)
+				case "fail":
+					log.Printf(
+						"tmdb enrichment fail: slug=%s attempted=%d succeeded=%d failed=%d error=%s",
+						progress.Slug,
+						progress.Counts.Attempted,
+						progress.Counts.Succeeded,
+						progress.Counts.Failed,
+						progress.Reason,
+					)
+				}
+			},
+		})
+		if err != nil {
+			return err
+		}
+		log.Printf(
+			"tmdb enrichment backfill done: scope=%s discovered=%d attempted=%d skipped=%d succeeded=%d failed=%d",
+			scope,
+			report.Discovered,
+			report.Attempted,
+			report.Skipped,
+			report.Succeeded,
+			report.Failed,
+		)
+		if len(report.Failures) > 0 {
+			for slug, reason := range report.Failures {
+				log.Printf("tmdb enrichment backfill failed: slug=%s error=%s", slug, reason)
+			}
+		}
+		return nil
+	case "sync-movie-kanata-home":
 		db, err := openContentDB(ctx, cfg)
 		if err != nil {
 			return err
@@ -806,7 +908,7 @@ func run(ctx context.Context, args []string) error {
 			return err
 		}
 		log.Printf(
-			"movie v3 kanata sync done: discovered=%d matched=%d upserted=%d failed=%d",
+			"movie kanata sync done: discovered=%d matched=%d upserted=%d failed=%d",
 			report.Discovered,
 			report.Matched,
 			report.Upserted,
@@ -818,13 +920,13 @@ func run(ctx context.Context, args []string) error {
 				if code == "" {
 					code = "unknown_error"
 				}
-				log.Printf("movie v3 kanata sync failed: slug=%s code=%s error=%s", slug, code, reason)
+				log.Printf("movie kanata sync failed: slug=%s code=%s error=%s", slug, code, reason)
 			}
 		}
 		return nil
-	case "sync-movie-v3-kanata-genre":
+	case "sync-movie-kanata-genre":
 		if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
-			return fmt.Errorf("usage: dwizzyscrape sync-movie-v3-kanata-genre <genre> [page] [limit]")
+			return fmt.Errorf("usage: dwizzyscrape sync-movie-kanata-genre <genre> [page] [limit]")
 		}
 		db, err := openContentDB(ctx, cfg)
 		if err != nil {
@@ -864,7 +966,7 @@ func run(ctx context.Context, args []string) error {
 			return err
 		}
 		log.Printf(
-			"movie v3 kanata genre sync done: genre=%s page=%d discovered=%d matched=%d upserted=%d failed=%d",
+			"movie kanata genre sync done: genre=%s page=%d discovered=%d matched=%d upserted=%d failed=%d",
 			genre,
 			page,
 			report.Discovered,
@@ -878,13 +980,13 @@ func run(ctx context.Context, args []string) error {
 				if code == "" {
 					code = "unknown_error"
 				}
-				log.Printf("movie v3 kanata genre sync failed: slug=%s code=%s error=%s", slug, code, reason)
+				log.Printf("movie kanata genre sync failed: slug=%s code=%s error=%s", slug, code, reason)
 			}
 		}
 		return nil
-	case "sync-movie-v3-kanata-search":
+	case "sync-movie-kanata-search":
 		if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
-			return fmt.Errorf("usage: dwizzyscrape sync-movie-v3-kanata-search <query> [page] [limit]")
+			return fmt.Errorf("usage: dwizzyscrape sync-movie-kanata-search <query> [page] [limit]")
 		}
 		db, err := openContentDB(ctx, cfg)
 		if err != nil {
@@ -924,7 +1026,7 @@ func run(ctx context.Context, args []string) error {
 			return err
 		}
 		log.Printf(
-			"movie v3 kanata search sync done: query=%q page=%d discovered=%d matched=%d upserted=%d failed=%d",
+			"movie kanata search sync done: query=%q page=%d discovered=%d matched=%d upserted=%d failed=%d",
 			query,
 			page,
 			report.Discovered,
@@ -938,7 +1040,7 @@ func run(ctx context.Context, args []string) error {
 				if code == "" {
 					code = "unknown_error"
 				}
-				log.Printf("movie v3 kanata search sync failed: slug=%s code=%s error=%s", slug, code, reason)
+				log.Printf("movie kanata search sync failed: slug=%s code=%s error=%s", slug, code, reason)
 			}
 		}
 		return nil
@@ -1018,7 +1120,7 @@ func newSnapshotCollectors(cfg config.Config, httpClient *http.Client) []snapsho
 		cfg.CatalogURL,
 		manhwaindo.NewService(manhwaClient, cfg.ManhwaindoBaseURL),
 		komiku.NewService(komikuClient, cfg.KomikuBaseURL),
-		cfg.PostgresURL,
+		cfg.DatabaseURL,
 	)
 }
 
@@ -1035,8 +1137,8 @@ func firstNonEmptyArgOrEnv(args []string, index int, envKey, fallback string) st
 }
 
 func openContentDB(ctx context.Context, cfg config.Config) (*store.PgxContentDB, error) {
-	if strings.TrimSpace(cfg.PostgresURL) == "" {
-		return nil, fmt.Errorf("POSTGRES_URL is required for content sync (NEON_DATABASE_URL supported as compatibility fallback)")
+	if strings.TrimSpace(cfg.DatabaseURL) == "" {
+		return nil, fmt.Errorf("DATABASE_URL is required for content sync")
 	}
-	return store.NewPgxContentDB(ctx, cfg.PostgresURL)
+	return store.NewPgxContentDB(ctx, cfg.DatabaseURL)
 }

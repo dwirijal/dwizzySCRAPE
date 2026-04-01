@@ -45,7 +45,7 @@ func TestEpisodeDetailStoreUpsert(t *testing.T) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("expected POST, got %s", r.Method)
 		}
-		if r.URL.Path != "/rest/v1/rpc/upsert_samehadaku_episode_v2" {
+		if r.URL.Path != "/rest/v1/rpc/upsert_media_unit" {
 			t.Fatalf("unexpected path %q", r.URL.Path)
 		}
 
@@ -53,24 +53,27 @@ func TestEpisodeDetailStoreUpsert(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read request body: %v", err)
 		}
-		var payload map[string][]map[string]any
+		var payload map[string]any
 		if err := json.Unmarshal(body, &payload); err != nil {
 			t.Fatalf("decode request body: %v", err)
 		}
-		rows := payload["payload"]
-		if len(rows) != 1 {
-			t.Fatalf("expected single payload item, got %d", len(rows))
-		}
-		if got := rows[0]["episode_slug"]; got != "ao-no-orchestra-season-2-episode-1-subtitle-indonesia" {
+		if got := payload["p_slug"]; got != "ao-no-orchestra-season-2-episode-1-subtitle-indonesia" {
 			t.Fatalf("unexpected episode_slug %#v", got)
 		}
-		if got := rows[0]["canonical_url"]; got != "https://v2.samehadaku.how/ao-no-orchestra-season-2-episode-1-subtitle-indonesia/" {
+		if got := payload["p_canonical_url"]; got != "https://v2.samehadaku.how/ao-no-orchestra-season-2-episode-1-subtitle-indonesia/" {
 			t.Fatalf("unexpected canonical_url %#v", got)
 		}
-		if got := rows[0]["effective_source_kind"]; got != "secondary" {
+		if got := payload["p_published_at"]; got != "2025-10-05T00:00:00Z" {
+			t.Fatalf("unexpected published_at %#v", got)
+		}
+		detailPayload, ok := payload["p_detail"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected object p_detail, got %#v", payload["p_detail"])
+		}
+		if got := detailPayload["effective_source_kind"]; got != "secondary" {
 			t.Fatalf("unexpected effective_source_kind %#v", got)
 		}
-		if got := rows[0]["fetch_status"]; got != "primary_challenge_blocked_secondary_fetched" {
+		if got := detailPayload["fetch_status"]; got != "primary_challenge_blocked_secondary_fetched" {
 			t.Fatalf("unexpected fetch_status %#v", got)
 		}
 		if !strings.Contains(string(body), "\"Download\":\"https://gofile.io/d/demo\"") {
@@ -98,13 +101,19 @@ func TestEpisodeDetailStoreListAnimeSlugs(t *testing.T) {
 		if r.Method != http.MethodGet {
 			t.Fatalf("expected GET, got %s", r.Method)
 		}
-		if r.URL.Path != "/rest/v1/anime_stream_ready_v2_view" {
+		if r.URL.Path != "/rest/v1/media_units" {
 			t.Fatalf("unexpected path %q", r.URL.Path)
 		}
-		if got := r.URL.Query().Get("select"); got != "anime_slug" {
+		if got := r.URL.Query().Get("select"); got != "detail" {
 			t.Fatalf("unexpected select %q", got)
 		}
-		if got := r.URL.Query().Get("order"); got != "anime_slug.asc" {
+		if got := r.URL.Query().Get("source"); got != "eq.samehadaku" {
+			t.Fatalf("unexpected source filter %q", got)
+		}
+		if got := r.URL.Query().Get("unit_type"); got != "eq.episode" {
+			t.Fatalf("unexpected unit_type filter %q", got)
+		}
+		if got := r.URL.Query().Get("order"); got != "updated_at.desc,slug.asc" {
 			t.Fatalf("unexpected order %q", got)
 		}
 		if got := r.URL.Query().Get("limit"); got != "3" {
@@ -115,7 +124,11 @@ func TestEpisodeDetailStoreListAnimeSlugs(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`[{"anime_slug":"ao-no-orchestra-season-2"},{"anime_slug":"ao-no-orchestra-season-2"},{"anime_slug":"yamada-kun-to-lv999-no-koi-wo-suru"}]`))
+		_, _ = w.Write([]byte(`[
+			{"detail":{"anime_slug":"ao-no-orchestra-season-2"}},
+			{"detail":{"anime_slug":"ao-no-orchestra-season-2"}},
+			{"detail":{"anime_slug":"yamada-kun-to-lv999-no-koi-wo-suru"}}
+		]`))
 	}))
 	defer server.Close()
 

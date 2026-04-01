@@ -1,0 +1,232 @@
+[
+  {
+    "db_anime_slug": "kusuriya-no-hitorigoto",
+    "db_title": "Kusuriya no Hitorigoto",
+    "db_source_title": "Kusuriya no Hitorigoto",
+    "query": "Kusuriya no Hitorigoto",
+    "match_status": "matched",
+    "match_score": 1,
+    "needs_review": false,
+    "matched_title": "Kusuriya no Hitorigoto",
+    "matched_url": "https://otakudesu.blog/anime/kusuriya-hitorigoto-sub-indo/",
+    "notes": "",
+    "episodes": [
+      {
+        "db_episode_slug": "",
+        "episode_number": "1",
+        "otakudesu_episode_url": "https://otakudesu.blog/episode/knh-episode-1-sub-indo/",
+        "stream_url": "https://desustream.info/dstream/desudesu3/v2/index.php?id=YWkzcnkxTHE1RnQrcXlDNGduSCtZdz09",
+        "download_url": "https://link.desustream.com/?id=Uk83OUt2T214S3VyTlZnTDBTeXJPNkU2WjV3cStpQmphVU92NFUrbEFmcVN2Wk0rMXJOQ0JDTDFIeXhqanVORGFYVDF2MjJYOUtGWXZ6TlhxUXdJM01MMjRqU0ZibU09",
+        "samehadaku_stream_present": false,
+        "samehadaku_download_present": false
+      },
+      {
+        "db_episode_slug": "",
+        "episode_number": "2",
+        "otakudesu_episode_url": "https://otakudesu.blog/episode/knh-episode-2-sub-indo/",
+        "stream_url": "https://desustream.info/dstream/desudesu3/v2/index.php?id=Uk5vQ2QyY0loazY5YUZyZ2gyd2x5Zz09",
+        "download_url": "https://link.desustream.com/?id=Uk83OUt2T214S3VyTlZnTDBTeXJPNkU2WjV3cStpQjZjVWFyNUZtMkYveWE5OEkrMXJOQ0JDTDFIeXhqanVORGFYVDF2MjJYOUtGYnZ6TlhxUXdJM01MMjRqU0ZibU09",
+        "samehadaku_stream_present": false,
+        "samehadaku_download_present": false
+      },
+      {
+        "db_episode_slug": "",
+        "episode_number": "3",
+        "otakudesu_episode_url": "https://otakudesu.blog/episode/knh-episode-3-sub-indo/",
+        "stream_url": "https://desustream.info/dstream/desudesu3/v2/index.php?id=elZwWVVlOCtBeUVCcDI1MXZJUWhoUT09",
+        "download_url": "https://link.desustream.com/?id=Uk83OUt2T214S3VyTlZnTDBTeXJPNkU2WjV3cStpQjBabDdwdWhQN0FiR1Y0YzgrMXJOQ0JDTDFIeXhqanVORGFYVDF2MjJYOUtGYXZ6TlhxUXdJM01MMjRqU0ZibU09",
+        "samehadaku_stream_present": false,
+        "samehadaku_download_present": false
+      },
+      {
+        "db_episode_slug": "",
+        "episode_number": "4",
+        "otakudesu_episode_url": "https://otakudesu.blog/episode/knh-episode-4-sub-indo/",
+        "stream_url": "https://desustream.info/dstream/desudesu3/v2/index.php?id=R1l2RUkwcVRLODQrQUpPS05IL3FnZz09",
+        "download_url": "https://link.desustream.com/?id=Uk83OUt2T214S3VyTlZnTDBTeXJPNkU2WjV3cStpQjZiMFdvOVZxbkFieUJ2NEkrMXJOQ0JDTDFIeXhqanVORGFYVDF2MjJYOUtGZHZ6TlhxUXdJM01MMjRqU0ZibU09",
+        "samehadaku_stream_present": false,
+        "samehadaku_download_present": false
+      },
+      {
+        "db_episode_slug": "",
+        "episode_number": "5",
+        "otakudesu_episode_url": "https://otakudesu.blog/episode/knh-episode-5-sub-indo/",
+        "stream_url": "https://desustream.info/dstream/desudesu3/v2/index.php?id=YWNwbXBvTW1QNU1Fb0E1dW5YVHZ0Zz09",
+        "download_url": "https://link.desustream.com/?id=Uk83OUt2T214S3VyTlZnTDBTeXJPNkU2WjV3cStpQjVMUVMyK0ViN1RMMk4rcDgrMXJOQ0JDTDFIeXhqanVORGFYVDF2MjJYOUtGY3Z6TlhxUXdJM01MMjRqU0ZibU09",
+        "samehadaku_stream_present": false,
+        "samehadaku_download_present": false
+      },
+      {
+        "db_episode_slug": "",
+        "episode_number": "6",
+        "otakudesu_episode_url": "https://otakudesu.blog/episode/knh-episode-6-sub-indo/",
+        "stream_url": "https://desustream.info/dstream/desudesu3/v2/index.php?id=RnovME9aL1hUZkNNc0ZUNGRuNmU3UT09",
+        "download_url": "https://link.desustream.com/?id=Uk83OUt2T214S3VyTlZnTDBTeXJPNkU2WjV3cStpQnJhZ0xxNmttaVNPVEo2WW8rMXJOQ0JDTDFIeXhqanVORGFYVDF2MjJYOUtGZnZ6TlhxUXdJM01MMjRqU0ZibU09",
+        "samehadaku_stream_present": false,
+        "samehadaku_download_present": false
+      },
+      {
+        "db_episode_slug": "",
+        "episode_number": "7",
+        "otakudesu_episode_url": "https://otakudesu.blog/episode/knh-episode-7-sub-indo/",
+        "stream_url": "https://desustream.info/dstream/desudesu3/v2/index.php?id=YzdUTlh0WmhJZFU1WUZiaXN2Q3J3QT09",
+        "download_url": "https://link.desustream.com/?id=Uk83OUt2T214S3VyTlZnTDBTeXJPNkU2WjV3cStpQTlmZ0dtNzF5Z0FlS0s1ODgrMXJOQ0JDTDFIeXhqanVORGFYVDF2MjJYOUtGZXZ6TlhxUXdJM01MMjRqU0ZibU09",
+        "samehadaku_stream_present": false,
+        "samehadaku_download_present": false
+      },
+      {
+        "db_episode_slug": "",
+        "episode_number": "8",
+        "otakudesu_episode_url": "https://otakudesu.blog/episode/knh-episode-8-sub-indo/",
+        "stream_url": "https://desustream.info/dstream/desudesu3/v2/index.php?id=LytuVTNoc2FRb1ljUnJhaGZqSFlVQT09",
+        "download_url": "https://link.desustream.com/?id=Uk83OUt2T214S3VyTlZnTDBTeXJPNkU2WjV3cStpQmxlZ1R1dUV1dEF2Nlo0NTgrMXJOQ0JDTDFIeXhqanVORGFYVDF2MjJYOUtGUnZ6TlhxUXdJM01MMjRqU0ZibU09",
+        "samehadaku_stream_present": false,
+        "samehadaku_download_present": false
+      },
+      {
+        "db_episode_slug": "",
+        "episode_number": "9",
+        "otakudesu_episode_url": "https://otakudesu.blog/episode/knh-episode-9-sub-indo/",
+        "stream_url": "https://desustream.info/dstream/desudesu3/v2/index.php?id=RHNOSnpWVzk0WTdXSlorN1RWSTZzZz09",
+        "download_url": "https://link.desustream.com/?id=Uk83OUt2T214S3VyTlZnTDBTeXJPNkU2WjV3cStpQjhhUUd4dWtENkh2R2F1NTQrMXJOQ0JDTDFIeXhqanVORGFYVDF2MjJYOUtGUXZ6TlhxUXdJM01MMjRqU0ZibU09",
+        "samehadaku_stream_present": false,
+        "samehadaku_download_present": false
+      },
+      {
+        "db_episode_slug": "",
+        "episode_number": "10",
+        "otakudesu_episode_url": "https://otakudesu.blog/episode/knh-episode-10-sub-indo/",
+        "stream_url": "https://desustream.info/dstream/desudesu3/v2/index.php?id=dk9VbnhqMWxJakdpWkVIejJ0SDdRQT09",
+        "download_url": "https://link.desustream.com/?id=Uk83OUt2T214S3VyTlZnTDBTeXJPNkU2WjV3cStpQjFjVnJxdXgya0NleU8rTTArMXJOQ0JDTDFIeXhqanVORGFYVDF2MjJYOUtCWnZ6TlhxUXdJM01MMjRqU0ZibU09",
+        "samehadaku_stream_present": false,
+        "samehadaku_download_present": false
+      },
+      {
+        "db_episode_slug": "",
+        "episode_number": "11",
+        "otakudesu_episode_url": "https://otakudesu.blog/episode/knh-episode-11-sub-indo/",
+        "stream_url": "https://desustream.info/dstream/desudesu3/v2/index.php?id=bDVZcDJrZTEvMkF3UUNVQzVveUp6dz09",
+        "download_url": "https://link.desustream.com/?id=Uk83OUt2T214S3VyTlZnTDBTeXJPNkU2WjV3cStpQjNlMVBxNkZPd0ZiMmR0NTArMXJOQ0JDTDFIeXhqanVORGFYVDF2MjJYOUtCWXZ6TlhxUXdJM01MMjRqU0ZibU09",
+        "samehadaku_stream_present": false,
+        "samehadaku_download_present": false
+      },
+      {
+        "db_episode_slug": "",
+        "episode_number": "12",
+        "otakudesu_episode_url": "https://otakudesu.blog/episode/knh-episode-12-sub-indo/",
+        "stream_url": "https://desustream.info/dstream/desudesu3/v2/index.php?id=cUVuRWNYZ25vK2xkTzBRcXNlL0x1UT09",
+        "download_url": "https://link.desustream.com/?id=Uk83OUt2T214S3VyTlZnTDBTeXJPNkU2WjV3cStpQjVjRit2dlY2bFEvR2Y1SW8rMXJOQ0JDTDFIeXhqanVORGFYVDF2MjJYOUtCYnZ6TlhxUXdJM01MMjRqU0ZibU09",
+        "samehadaku_stream_present": false,
+        "samehadaku_download_present": false
+      },
+      {
+        "db_episode_slug": "",
+        "episode_number": "13",
+        "otakudesu_episode_url": "https://otakudesu.blog/episode/knh-episode-13-sub-indo/",
+        "stream_url": "https://desustream.info/dstream/desudesu3/v2/index.php?id=bmUzOElaMDNhVlFYVXRnN3JWYkhjZz09",
+        "download_url": "https://link.desustream.com/?id=Uk83OUt2T214S3VyTlZnTDBTeXJPNkU2WjV3cStpQTBiRVc3NFVhNlNmL0o0NE0rMXJOQ0JDTDFIeXhqanVORGFYVDF2MjJYOUtCYXZ6TlhxUXdJM01MMjRqU0ZibU09",
+        "samehadaku_stream_present": false,
+        "samehadaku_download_present": false
+      },
+      {
+        "db_episode_slug": "",
+        "episode_number": "14",
+        "otakudesu_episode_url": "https://otakudesu.blog/episode/knh-episode-14-sub-indo/",
+        "stream_url": "https://desustream.info/dstream/desudesu3/v2/index.php?id=UFhGUE5HRWg1clcrU0lOOXVXYzBsUT09",
+        "download_url": "https://link.desustream.com/?id=Uk83OUt2T214S3VyTlZnTDBTeXJPNkU2WjV3cStpQmlmVVc1K2xyN1ErZVA0SU0rMXJOQ0JDTDFIeXhqanVORGFYVDF2MjJYOUtCZHZ6TlhxUXdJM01MMjRqU0ZibU09",
+        "samehadaku_stream_present": false,
+        "samehadaku_download_present": false
+      },
+      {
+        "db_episode_slug": "",
+        "episode_number": "15",
+        "otakudesu_episode_url": "https://otakudesu.blog/episode/knh-episode-15-sub-indo/",
+        "stream_url": "https://desustream.info/dstream/desudesu3/v2/index.php?id=LzZKZ3VHRGVtY3R4UE42UU03R3lhdz09",
+        "download_url": "https://link.desustream.com/?id=Uk83OUt2T214S3VyTlZnTDBTeXJPNkU2WjV3cStpQjFaRjdtNUZ1dkZmSEo3WncrMXJOQ0JDTDFIeXhqanVORGFYVDF2MjJYOUtCY3Z6TlhxUXdJM01MMjRqU0ZibU09",
+        "samehadaku_stream_present": false,
+        "samehadaku_download_present": false
+      },
+      {
+        "db_episode_slug": "",
+        "episode_number": "16",
+        "otakudesu_episode_url": "https://otakudesu.blog/episode/knh-episode-16-sub-indo/",
+        "stream_url": "https://desustream.info/dstream/desudesu3/v2/index.php?id=Ull6b3drL2hLNjZhdTlLdXpHaGtEQT09",
+        "download_url": "https://link.desustream.com/?id=Uk83OUt2T214S3VyTlZnTDBTeXJPNkU2WjV3cStpQmplbDJvNjBIMEQvUE0rcDgrMXJOQ0JDTDFIeXhqanVORGFYVDF2MjJYOUtCZnZ6TlhxUXdJM01MMjRqU0ZibU09",
+        "samehadaku_stream_present": false,
+        "samehadaku_download_present": false
+      },
+      {
+        "db_episode_slug": "",
+        "episode_number": "17",
+        "otakudesu_episode_url": "https://otakudesu.blog/episode/knh-episode-17-sub-indo/",
+        "stream_url": "https://desustream.info/dstream/desudesu3/v2/index.php?id=b2ovQi8yZ3lZdCtMZUJnd2ZydEhMQT09",
+        "download_url": "https://link.desustream.com/?id=Uk83OUt2T214S3VyTlZnTDBTeXJPNkU2WjV3cStpQjdaa2lvNzBqNkhPK2I1Y0krMXJOQ0JDTDFIeXhqanVORGFYVDF2MjJYOUtCZXZ6TlhxUXdJM01MMjRqU0ZibU09",
+        "samehadaku_stream_present": false,
+        "samehadaku_download_present": false
+      },
+      {
+        "db_episode_slug": "",
+        "episode_number": "18",
+        "otakudesu_episode_url": "https://otakudesu.blog/episode/knh-episode-18-sub-indo/",
+        "stream_url": "https://desustream.info/dstream/desudesu3/v2/index.php?id=SHdNV1FPUVRIRjk1ZzdUMjdFTCtzdz09",
+        "download_url": "https://link.desustream.com/?id=Uk83OUt2T214S3VyTlZnTDBTeXJPNkU2WjV3cStpQmtaQVM2dmg2MkdmK1U2WjQrMXJOQ0JDTDFIeXhqanVORGFYVDF2MjJYOUtCUnZ6TlhxUXdJM01MMjRqU0ZibU09",
+        "samehadaku_stream_present": false,
+        "samehadaku_download_present": false
+      },
+      {
+        "db_episode_slug": "",
+        "episode_number": "19",
+        "otakudesu_episode_url": "https://otakudesu.blog/episode/knh-episode-19-sub-indo/",
+        "stream_url": "https://desustream.info/dstream/desudesu3/v2/index.php?id=VW04emlHNjVwSXJIdmVuWkg5Rklqdz09",
+        "download_url": "https://link.desustream.com/?id=Uk83OUt2T214S3VyTlZnTDBTeXJPNkU2WjV3cStpQnFkd0d6L3h1c0ZlL1B2SUkrMXJOQ0JDTDFIeXhqanVORGFYVDF2MjJYOUtCUXZ6TlhxUXdJM01MMjRqU0ZibU09",
+        "samehadaku_stream_present": false,
+        "samehadaku_download_present": false
+      },
+      {
+        "db_episode_slug": "",
+        "episode_number": "20",
+        "otakudesu_episode_url": "https://otakudesu.blog/episode/knh-episode-20-sub-indo/",
+        "stream_url": "https://desustream.info/dstream/desudesu3/v2/index.php?id=YTFYNTNWRnBKUjBSTE1lVFZCWjNUQT09",
+        "download_url": "https://link.desustream.com/?id=Uk83OUt2T214S3VyTlZnTDBTeXJPNkU2WjV3cStpQTRja3J2NzB5aUR1YkJ2SWcrMXJOQ0JDTDFIeXhqanVORGFYVDF2MjJYOUtOWnZ6TlhxUXdJM01MMjRqU0ZibU09",
+        "samehadaku_stream_present": false,
+        "samehadaku_download_present": false
+      },
+      {
+        "db_episode_slug": "",
+        "episode_number": "21",
+        "otakudesu_episode_url": "https://otakudesu.blog/episode/knh-episode-21-sub-indo/",
+        "stream_url": "https://desustream.info/dstream/desudesu3/v2/index.php?id=Q0d0UUt3SXdzeUltcHJJa3V6eVdRUT09",
+        "download_url": "https://link.desustream.com/?id=Uk83OUt2T214S3VyTlZnTDBTeXJPNkU2WjV3cStpQnVMa2FtNDAveFF2R2Z0NVkrMXJOQ0JDTDFIeXhqanVORGFYVDF2MjJYOUtOWXZ6TlhxUXdJM01MMjRqU0ZibU09",
+        "samehadaku_stream_present": false,
+        "samehadaku_download_present": false
+      },
+      {
+        "db_episode_slug": "",
+        "episode_number": "22",
+        "otakudesu_episode_url": "https://otakudesu.blog/episode/knh-episode-22-sub-indo/",
+        "stream_url": "https://desustream.info/dstream/desudesu3/v2/index.php?id=VGFRN3FhMTlEYkVpTmVHUGNjeHFPQT09",
+        "download_url": "https://link.desustream.com/?id=Uk83OUt2T214S3VyTlZnTDBTeXJPNkU2WjV3cStpQjVlMWlwdmwydVRleUt2cEUrMXJOQ0JDTDFIeXhqanVORGFYVDF2MjJYOUtOYnZ6TlhxUXdJM01MMjRqU0ZibU09",
+        "samehadaku_stream_present": false,
+        "samehadaku_download_present": false
+      },
+      {
+        "db_episode_slug": "",
+        "episode_number": "23",
+        "otakudesu_episode_url": "https://otakudesu.blog/episode/knh-episode-23-sub-indo/",
+        "stream_url": "https://desustream.info/dstream/desudesu3/v2/index.php?id=TnlEaEFCRUFuVUw2VE1KWXZjYmRGQT09",
+        "download_url": "https://link.desustream.com/?id=Uk83OUt2T214S3VyTlZnTDBTeXJPNkU2WjV3cStpQnZLVm1tK2hyMUVlTE0vY0krMXJOQ0JDTDFIeXhqanVORGFYVDF2MjJYOUtOYXZ6TlhxUXdJM01MMjRqU0ZibU09",
+        "samehadaku_stream_present": false,
+        "samehadaku_download_present": false
+      },
+      {
+        "db_episode_slug": "",
+        "episode_number": "24",
+        "otakudesu_episode_url": "https://otakudesu.blog/episode/knh-episode-24-sub-indo/",
+        "stream_url": "https://desustream.info/dstream/desudesu3/v2/index.php?id=WjZqODNHZVRmTnNWNmJLUDVmbkdHUT09",
+        "download_url": "https://link.desustream.com/?id=Uk83OUt2T214S3VyTlZnTDBTeXJPNkU2WjV3cStpQjFMZ0xzdnhpckh1K0E0NEErMXJOQ0JDTDFIeXhqanVORGFYVDF2MjJYOUtOZHYwVVAvU01WaDRLeTRqR0JOeUZLTWhPUA==",
+        "samehadaku_stream_present": false,
+        "samehadaku_download_present": false
+      }
+    ]
+  }
+]

@@ -144,7 +144,7 @@ func parseCard(selection *goquery.Selection, sourceDomain string, scrapedAt time
 	return CatalogItem{
 		Source:          "samehadaku",
 		SourceDomain:    sourceDomain,
-		ContentType:     "anime",
+		ContentType:     contentTypeFromAnimeType(animeType),
 		Title:           title,
 		CanonicalURL:    canonicalURL,
 		Slug:            slugFromURL(canonicalURL),
@@ -157,6 +157,13 @@ func parseCard(selection *goquery.Selection, sourceDomain string, scrapedAt time
 		Genres:          genres,
 		ScrapedAt:       scrapedAt,
 	}, true
+}
+
+func contentTypeFromAnimeType(animeType string) string {
+	if strings.EqualFold(strings.TrimSpace(animeType), "movie") {
+		return "movie"
+	}
+	return "anime"
 }
 
 func dedupeCatalog(items []CatalogItem) []CatalogItem {

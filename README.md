@@ -9,11 +9,12 @@ Current scope:
 - storage model: current-state only
 - destination: lean local Postgres canonical media tables
 - stored fields: title, canonical URL, slug, poster URL, anime type, status, score, views, synopsis excerpt, genres, timestamps
-Compact v2 additive read model:
+Active read model:
 
 - anime: `anime_list` + `anime_meta` + `anime_episodes`
-- old tables stay as scraper staging until cutover is complete
-- v2 prefers MAL/Jikan for anime, then falls back to scraped source values
+- movie: `movies` + `movie_meta` + provider edge tables
+- lean staging target: `media_items` + `media_units` + `lookup_dims`
+- anime metadata prefers MAL/Jikan when available, then falls back to scraped source values
 
 ## Commands
 
@@ -25,9 +26,9 @@ go run ./cmd/dwizzyscrape detail-anime ao-no-orchestra-season-2
 go run ./cmd/dwizzyscrape backfill-anime-details
 go run ./cmd/dwizzyscrape detail-episodes ao-no-orchestra-season-2
 go run ./cmd/dwizzyscrape backfill-episodes
-go run ./cmd/dwizzyscrape refresh-anime-v2
-go run ./cmd/dwizzyscrape refresh-media-v2
-go run ./cmd/dwizzyscrape refresh-movie-v3
+go run ./cmd/dwizzyscrape refresh-anime
+go run ./cmd/dwizzyscrape refresh-media
+go run ./cmd/dwizzyscrape refresh-movies
 go run ./cmd/dwizzyscrape manhwa-catalog
 go run ./cmd/dwizzyscrape manhwa-series solo-leveling
 go run ./cmd/dwizzyscrape manhwa-chapter solo-leveling-chapter-100
@@ -90,7 +91,7 @@ Notes:
 
 - `cron-media-latest.sh` does incremental fetch from Samehadaku, Manhwaindo, Komiku, and Kanata movie home.
 - It uses lock file (`/tmp/dwizzyscrape-cron-media-latest.lock`) to avoid overlap and can skip when backfill job is running.
-- `cron-media-maintenance.sh` refreshes SQL read models (`refresh-anime-v2`, `refresh-media-v2`, `refresh-movie-v3`).
+- `cron-media-maintenance.sh` refreshes SQL read models (`refresh-anime`, `refresh-media`, `refresh-movies`).
 - `list-snapshot-patch-targets.sh` queries the read model for titles updated recently and emits `domain slug touched_at` rows.
 - `publish-weeb-snapshot-patches.sh` loops over recent patch targets and refreshes only the affected snapshot docs.
 - `publish-weeb-snapshots.sh` bridges the raw snapshot pack into `dwizzyWEEB/public/snapshots/current` by calling `dwizzyWEEB/scripts/build-snapshot-bundle.mjs`.
@@ -107,7 +108,7 @@ The repo now supports free CI scheduling with two workflows:
 
 Expected GitHub secrets for CI:
 
-- `POSTGRES_URL` preferred when CI uses a reachable Postgres
+- `DATABASE_URL`
 - `NEON_DATABASE_URL`
 - `SAMEHADAKU_COOKIE` when needed
 - `TMDB_READ_TOKEN` or `TMDB_API_KEY` when movie enrichment is enabled
@@ -130,8 +131,8 @@ Runtime ownership:
 - `dwizzySCRAPE` writes media directly to `Postgres`
 - public apps should read anime/movie content through `api.dwizzy.my.id`, not from Neon or Supabase directly
 
-- `POSTGRES_URL` recommended as primary runtime database DSN
-- `DATABASE_URL` supported as compatibility alias
+- `DATABASE_URL` primary runtime database DSN
+- `POSTGRES_URL` legacy compatibility fallback
 - `NEON_DATABASE_URL` supported only as compatibility fallback while local Postgres is being rolled out
 - `SAMEHADAKU_CATALOG_URL` optional, defaults to `https://v2.samehadaku.how/daftar-anime-2/`
 - `SAMEHADAKU_COOKIE` optional, only needed when Cloudflare challenge blocks anonymous requests
@@ -145,6 +146,7 @@ Runtime ownership:
 - `KOMIKU_USER_AGENT` optional, defaults to the same browser UA used for Samehadaku
 - `KOMIKU_COOKIE` optional, only needed when source protection blocks anonymous requests
 - `JIKAN_BASE_URL` optional, defaults to `https://api.jikan.moe/v4`
+- `ANILIST_BASE_URL` optional, defaults to `https://graphql.anilist.co`
 - `TMDB_BASE_URL` optional, defaults to `https://api.themoviedb.org/3`
 - `TMDB_READ_TOKEN` optional, recommended for movie enrichment
 - `TMDB_API_KEY` optional fallback if you do not want to use a bearer token
@@ -162,13 +164,14 @@ Keep `SAMEHADAKU_COOKIE` as a fallback for days when Cloudflare starts challengi
 
 ## Storage note
 
-Active anime/movie/media sync writes directly to `POSTGRES_URL` (or `DATABASE_URL` alias). `NEON_DATABASE_URL` is kept only as a compatibility fallback during migration.
+Active anime/movie/media sync writes directly to `DATABASE_URL`. `POSTGRES_URL` and `NEON_DATABASE_URL` are kept only as compatibility fallbacks.
 No Supabase management API path is required for media ingestion in this service.
 
 Only root-level files in `sql/*.sql` are replayed during migrate/refresh.
 Historical migrations are archived under `sql/archive/` and intentionally excluded
 from runtime replay to keep schema application lean.
-## Compact v2 code map
+
+## Code Map
 
 - anime source: `s = samehadaku`
 - anime metadata source: `m = MAL/Jikan`, `s = scrape`

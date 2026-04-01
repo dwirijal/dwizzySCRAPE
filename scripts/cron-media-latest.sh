@@ -11,9 +11,9 @@ if [[ -f "${PROJECT_DIR}/.env" ]]; then
   set +a
 fi
 
-DB_DSN="${POSTGRES_URL:-${DATABASE_URL:-${NEON_DATABASE_URL:-}}}"
+DB_DSN="${DATABASE_URL:-${POSTGRES_URL:-${NEON_DATABASE_URL:-}}}"
 if [[ -z "${DB_DSN}" ]]; then
-  echo "[cron-media-latest] missing DB DSN (POSTGRES_URL/DATABASE_URL; NEON_DATABASE_URL is compatibility fallback)" >&2
+  echo "[cron-media-latest] missing DB DSN (DATABASE_URL; POSTGRES_URL/NEON_DATABASE_URL are compatibility fallbacks)" >&2
   exit 1
 fi
 
@@ -101,13 +101,16 @@ MOVIE_HOME_LIMIT="${MOVIE_HOME_LIMIT:-48}"
 
 safe_run "samehadaku:catalog-sync" sync || true
 
-mapfile -t anime_slugs < <(
-  query_lines "select slug from anime_list where source_code='s' order by updated_at desc nulls last limit ${ANIME_RECENT_LIMIT};"
+mapfile -t anime_rows < <(
+  query_lines "select slug || E'\t' || media_type from media_items where source='samehadaku' order by updated_at desc nulls last limit ${ANIME_RECENT_LIMIT};"
 )
-for slug in "${anime_slugs[@]}"; do
+for row in "${anime_rows[@]}"; do
+  IFS=$'\t' read -r slug media_type <<<"${row}"
   [[ -z "${slug}" ]] && continue
   safe_run "samehadaku:detail:${slug}" detail-anime "${slug}" || true
-  safe_run "samehadaku:episodes:${slug}" detail-episodes "${slug}" || true
+  if [[ "${media_type}" == "anime" ]]; then
+    safe_run "samehadaku:episodes:${slug}" detail-episodes "${slug}" || true
+  fi
 done
 
 for page in $(seq 1 "${MANHWA_CATALOG_PAGES}"); do
@@ -115,7 +118,7 @@ for page in $(seq 1 "${MANHWA_CATALOG_PAGES}"); do
 done
 
 mapfile -t manhwa_series_slugs < <(
-  query_lines "select source_slug from content_source_links where source_key='manhwaindo' order by last_scraped_at desc nulls last limit ${MANHWA_RECENT_SERIES_LIMIT};"
+  query_lines "select slug from media_items where source='manhwaindo' order by updated_at desc nulls last limit ${MANHWA_RECENT_SERIES_LIMIT};"
 )
 for slug in "${manhwa_series_slugs[@]}"; do
   [[ -z "${slug}" ]] && continue
@@ -123,7 +126,7 @@ for slug in "${manhwa_series_slugs[@]}"; do
 done
 
 mapfile -t manhwa_latest_chapter_slugs < <(
-  query_lines "select latest_unit_slug from content_titles t join content_source_links l on l.title_id=t.id and l.source_key='manhwaindo' where t.latest_unit_slug is not null and t.latest_unit_slug<>'' order by t.updated_at desc nulls last limit ${MANHWA_RECENT_CHAPTER_LIMIT};"
+  query_lines "select slug from media_units where source='manhwaindo' and unit_type='chapter' order by updated_at desc nulls last limit ${MANHWA_RECENT_CHAPTER_LIMIT};"
 )
 for slug in "${manhwa_latest_chapter_slugs[@]}"; do
   [[ -z "${slug}" ]] && continue
@@ -135,7 +138,7 @@ for page in $(seq 1 "${KOMIKU_CATALOG_PAGES}"); do
 done
 
 mapfile -t komiku_series_slugs < <(
-  query_lines "select source_slug from content_source_links where source_key='komiku' order by last_scraped_at desc nulls last limit ${KOMIKU_RECENT_SERIES_LIMIT};"
+  query_lines "select slug from media_items where source='komiku' order by updated_at desc nulls last limit ${KOMIKU_RECENT_SERIES_LIMIT};"
 )
 for slug in "${komiku_series_slugs[@]}"; do
   [[ -z "${slug}" ]] && continue
@@ -143,13 +146,11 @@ for slug in "${komiku_series_slugs[@]}"; do
 done
 
 mapfile -t komiku_latest_chapter_slugs < <(
-  query_lines "select latest_unit_slug from content_titles t join content_source_links l on l.title_id=t.id and l.source_key='komiku' where t.latest_unit_slug is not null and t.latest_unit_slug<>'' order by t.updated_at desc nulls last limit ${KOMIKU_RECENT_CHAPTER_LIMIT};"
+  query_lines "select slug from media_units where source='komiku' and unit_type='chapter' order by updated_at desc nulls last limit ${KOMIKU_RECENT_CHAPTER_LIMIT};"
 )
 for slug in "${komiku_latest_chapter_slugs[@]}"; do
   [[ -z "${slug}" ]] && continue
   safe_run "komiku:chapter:${slug}" sync-komiku-chapter "${slug}" || true
 done
-
-safe_run "movie:kanata-home" sync-movie-v3-kanata-home "${MOVIE_HOME_LIMIT}" || true
 
 echo "[$(now_utc)] done cron-media-latest"

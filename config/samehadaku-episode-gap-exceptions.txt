@@ -1,0 +1,6 @@
+boku-no-hero-academia-season-2	secondary source returns 404 on anime page
+dragon-ball-super-movie-super-hero	primary page behaves like movie/special and misses expected episode selectors
+ganbare-douki-chan	secondary source returns 404 on anime page
+haikyuu-second-season	secondary source returns 404 on anime page
+kimetsu-no-yaiba-movie-mugen-train	secondary source returns 404 on anime page
+nanatsu-no-taizai-movie-2-hikari-ni-norowareshi-mono-tachi	primary page behaves like movie/special and misses expected episode selectors

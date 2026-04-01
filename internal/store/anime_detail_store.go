@@ -71,44 +71,7 @@ func (s *AnimeDetailStore) UpsertAnimeDetail(ctx context.Context, detail samehad
 		return fmt.Errorf("detail slug is required")
 	}
 	if s.db != nil {
-		payloadItem := animeDetailPayload{
-			Slug:                  detail.Slug,
-			CanonicalURL:          detail.CanonicalURL,
-			PrimarySourceURL:      detail.PrimarySourceURL,
-			PrimarySourceDomain:   detail.PrimarySourceDomain,
-			SecondarySourceURL:    detail.SecondarySourceURL,
-			SecondarySourceDomain: detail.SecondarySourceDomain,
-			EffectiveSourceURL:    detail.EffectiveSourceURL,
-			EffectiveSourceDomain: detail.EffectiveSourceDomain,
-			EffectiveSourceKind:   detail.EffectiveSourceKind,
-			SourceTitle:           detail.SourceTitle,
-			MALID:                 detail.MALID,
-			MALURL:                detail.MALURL,
-			MALThumbnailURL:       detail.MALThumbnailURL,
-			SynopsisSource:        detail.SynopsisSource,
-			SynopsisEnriched:      detail.SynopsisEnriched,
-			AnimeType:             detail.AnimeType,
-			Status:                detail.Status,
-			Season:                detail.Season,
-			StudioNames:           detail.StudioNames,
-			GenreNames:            detail.GenreNames,
-			BatchLinksJSON:        rawJSONOrFallback(detail.BatchLinksJSON, []byte("{}")),
-			CastJSON:              rawJSONOrFallback(detail.CastJSON, []byte("[]")),
-			SourceMetaJSON:        rawJSONOrFallback(detail.SourceMetaJSON, []byte("{}")),
-			JikanMetaJSON:         rawJSONOrFallback(detail.JikanMetaJSON, []byte("{}")),
-			SourceFetchStatus:     detail.SourceFetchStatus,
-			SourceFetchError:      detail.SourceFetchError,
-			ScrapedAt:             detail.ScrapedAt.UTC().Format(time.RFC3339Nano),
-		}
-		payload, err := json.Marshal([]animeDetailPayload{payloadItem})
-		if err != nil {
-			return fmt.Errorf("encode rpc payload: %w", err)
-		}
-		var affected int
-		if err := s.db.QueryRow(ctx, `SELECT public.upsert_samehadaku_anime_detail_v2($1::jsonb)`, payload).Scan(&affected); err != nil {
-			return fmt.Errorf("execute upsert_samehadaku_anime_detail_v2: %w", err)
-		}
-		return nil
+		return s.upsertAnimeDetailWithDB(ctx, detail)
 	}
 	if s.client == nil {
 		return fmt.Errorf("http client is required")
@@ -119,44 +82,12 @@ func (s *AnimeDetailStore) UpsertAnimeDetail(ctx context.Context, detail samehad
 	if s.secretKey == "" {
 		return fmt.Errorf("supabase secret key is required")
 	}
-	endpoint, err := url.Parse(s.supabaseURL + "/rest/v1/rpc/upsert_samehadaku_anime_detail_v2")
+	endpoint, err := url.Parse(s.supabaseURL + "/rest/v1/rpc/upsert_media_item")
 	if err != nil {
 		return fmt.Errorf("build rpc endpoint: %w", err)
 	}
 
-	payloadItem := animeDetailPayload{
-		Slug:                  detail.Slug,
-		CanonicalURL:          detail.CanonicalURL,
-		PrimarySourceURL:      detail.PrimarySourceURL,
-		PrimarySourceDomain:   detail.PrimarySourceDomain,
-		SecondarySourceURL:    detail.SecondarySourceURL,
-		SecondarySourceDomain: detail.SecondarySourceDomain,
-		EffectiveSourceURL:    detail.EffectiveSourceURL,
-		EffectiveSourceDomain: detail.EffectiveSourceDomain,
-		EffectiveSourceKind:   detail.EffectiveSourceKind,
-		SourceTitle:           detail.SourceTitle,
-		MALID:                 detail.MALID,
-		MALURL:                detail.MALURL,
-		MALThumbnailURL:       detail.MALThumbnailURL,
-		SynopsisSource:        detail.SynopsisSource,
-		SynopsisEnriched:      detail.SynopsisEnriched,
-		AnimeType:             detail.AnimeType,
-		Status:                detail.Status,
-		Season:                detail.Season,
-		StudioNames:           detail.StudioNames,
-		GenreNames:            detail.GenreNames,
-		BatchLinksJSON:        rawJSONOrFallback(detail.BatchLinksJSON, []byte("{}")),
-		CastJSON:              rawJSONOrFallback(detail.CastJSON, []byte("[]")),
-		SourceMetaJSON:        rawJSONOrFallback(detail.SourceMetaJSON, []byte("{}")),
-		JikanMetaJSON:         rawJSONOrFallback(detail.JikanMetaJSON, []byte("{}")),
-		SourceFetchStatus:     detail.SourceFetchStatus,
-		SourceFetchError:      detail.SourceFetchError,
-		ScrapedAt:             detail.ScrapedAt.UTC().Format(time.RFC3339Nano),
-	}
-
-	payload, err := json.Marshal(map[string]any{
-		"payload": []animeDetailPayload{payloadItem},
-	})
+	payload, err := json.Marshal(s.animeMediaItemPayload(detail))
 	if err != nil {
 		return fmt.Errorf("encode rpc payload: %w", err)
 	}
@@ -200,8 +131,10 @@ func (s *AnimeDetailStore) ListAnimeSlugs(ctx context.Context, offset, limit int
 SELECT COALESCE(json_agg(row_to_json(q)), '[]'::json)::text
 FROM (
     SELECT slug
-    FROM public.anime_detail_ready_v2_view
-    ORDER BY slug ASC
+    FROM public.media_items
+    WHERE source = 'samehadaku'
+      AND COALESCE(detail->>'primary_source_url', '') <> ''
+    ORDER BY updated_at DESC, slug ASC
     LIMIT $1 OFFSET $2
 ) q
 `, limit, offset).Scan(&body); err != nil {
@@ -246,13 +179,14 @@ FROM (
 		return nil, fmt.Errorf("offset must be non-negative")
 	}
 
-	endpoint, err := url.Parse(s.supabaseURL + "/rest/v1/anime_detail_ready_v2_view")
+	endpoint, err := url.Parse(s.supabaseURL + "/rest/v1/media_items")
 	if err != nil {
 		return nil, fmt.Errorf("build list endpoint: %w", err)
 	}
 	query := endpoint.Query()
-	query.Set("select", "slug")
-	query.Set("order", "slug.asc")
+	query.Set("select", "slug,detail")
+	query.Set("source", "eq.samehadaku")
+	query.Set("order", "updated_at.desc,slug.asc")
 	query.Set("limit", fmt.Sprintf("%d", limit))
 	query.Set("offset", fmt.Sprintf("%d", offset))
 	endpoint.RawQuery = query.Encode()
@@ -280,7 +214,8 @@ FROM (
 	}
 
 	var rows []struct {
-		Slug string `json:"slug"`
+		Slug   string         `json:"slug"`
+		Detail map[string]any `json:"detail"`
 	}
 	if err := json.Unmarshal(body, &rows); err != nil {
 		return nil, fmt.Errorf("decode list response: %w", err)
@@ -289,6 +224,9 @@ FROM (
 	seen := make(map[string]struct{}, len(rows))
 	slugs := make([]string, 0, len(rows))
 	for _, row := range rows {
+		if strings.TrimSpace(stringValue(row.Detail["primary_source_url"])) == "" {
+			continue
+		}
 		slug := strings.TrimSpace(row.Slug)
 		if slug == "" {
 			continue
@@ -308,4 +246,107 @@ func rawJSONOrFallback(value []byte, fallback []byte) json.RawMessage {
 		return json.RawMessage(fallback)
 	}
 	return json.RawMessage(value)
+}
+
+func (s *AnimeDetailStore) upsertAnimeDetailWithDB(ctx context.Context, detail samehadaku.AnimeDetail) error {
+	mediaType := samehadakuMediaType("", detail.AnimeType)
+	itemKey := mediaItemKey("samehadaku", mediaType, detail.Slug)
+	payloadMap := s.animeMediaItemPayload(detail)
+	detailMap, _ := payloadMap["p_detail"].(map[string]any)
+	payload, err := json.Marshal(detailMap)
+	if err != nil {
+		return fmt.Errorf("encode media detail: %w", err)
+	}
+
+	var malID any
+	if detail.MALID > 0 {
+		malID = int64(detail.MALID)
+	}
+
+	if err := s.db.Exec(ctx, `
+SELECT public.upsert_media_item(
+	$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb
+)
+`, itemKey, "samehadaku", mediaType, detail.Slug, detail.SourceTitle, detail.MALThumbnailURL, detail.Status, nil, float32(0), malID, nil, payload); err != nil {
+		return fmt.Errorf("execute upsert_media_item: %w", err)
+	}
+	if err := upsertMediaTaxonomy(ctx, s.db, itemKey, ClassifyMediaItem("samehadaku", mediaType, detailMap)); err != nil {
+		return fmt.Errorf("update media taxonomy: %w", err)
+	}
+	return nil
+}
+
+func (s *AnimeDetailStore) animeMediaItemPayload(detail samehadaku.AnimeDetail) map[string]any {
+	mediaType := samehadakuMediaType("", detail.AnimeType)
+	return map[string]any{
+		"p_item_key":   mediaItemKey("samehadaku", mediaType, detail.Slug),
+		"p_source":     "samehadaku",
+		"p_media_type": mediaType,
+		"p_slug":       detail.Slug,
+		"p_title":      detail.SourceTitle,
+		"p_cover_url":  detail.MALThumbnailURL,
+		"p_status":     detail.Status,
+		"p_year":       nil,
+		"p_score":      0,
+		"p_mal_id": func() any {
+			if detail.MALID > 0 {
+				return detail.MALID
+			}
+			return nil
+		}(),
+		"p_tmdb_id": nil,
+		"p_detail": annotateSamehadakuDetail(map[string]any{
+			"canonical_url":           detail.CanonicalURL,
+			"primary_source_url":      detail.PrimarySourceURL,
+			"primary_source_domain":   detail.PrimarySourceDomain,
+			"secondary_source_url":    detail.SecondarySourceURL,
+			"secondary_source_domain": detail.SecondarySourceDomain,
+			"effective_source_url":    detail.EffectiveSourceURL,
+			"effective_source_domain": detail.EffectiveSourceDomain,
+			"effective_source_kind":   detail.EffectiveSourceKind,
+			"source_title":            detail.SourceTitle,
+			"mal_url":                 detail.MALURL,
+			"mal_thumbnail_url":       detail.MALThumbnailURL,
+			"synopsis":                firstNonBlank(detail.SynopsisEnriched, detail.SynopsisSource),
+			"synopsis_source":         detail.SynopsisSource,
+			"synopsis_enriched":       detail.SynopsisEnriched,
+			"anime_type":              detail.AnimeType,
+			"type_code":               animeTypeCode(detail.AnimeType),
+			"season":                  detail.Season,
+			"season_code":             animeSeasonCode(detail.Season),
+			"studio_names":            detail.StudioNames,
+			"genre_names":             detail.GenreNames,
+			"batch_links_json":        rawJSONOrFallback(detail.BatchLinksJSON, []byte("{}")),
+			"cast_json":               rawJSONOrFallback(detail.CastJSON, []byte("[]")),
+			"source_meta_json":        rawJSONOrFallback(detail.SourceMetaJSON, []byte("{}")),
+			"jikan_meta_json":         rawJSONOrFallback(detail.JikanMetaJSON, []byte("{}")),
+			"source_fetch_status":     detail.SourceFetchStatus,
+			"source_fetch_error":      detail.SourceFetchError,
+			"scraped_at":              detail.ScrapedAt.UTC().Format(time.RFC3339Nano),
+		}, detail.Slug, detail.SourceTitle),
+	}
+}
+
+func animeSeasonCode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "winter":
+		return "w"
+	case "spring":
+		return "p"
+	case "summer":
+		return "s"
+	case "fall", "autumn":
+		return "f"
+	default:
+		return ""
+	}
+}
+
+func firstNonBlank(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }

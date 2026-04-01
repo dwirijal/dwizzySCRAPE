@@ -58,3 +58,44 @@ func TestPickBestMovieMatchResultMatched(t *testing.T) {
 		t.Fatalf("unexpected hit id %d", result.Hit.ID)
 	}
 }
+
+func TestPickBestSeriesMatchResultMatched(t *testing.T) {
+	hit := SeriesSearchHit{
+		ID:               246,
+		Name:             "Bleach",
+		OriginalName:     "BLEACH",
+		FirstAirDate:     "2004-10-05",
+		OriginalLanguage: "ja",
+		OriginCountry:    []string{"JP"},
+	}
+
+	result := PickBestSeriesMatchResult("Bleach", 2004, []SeriesSearchHit{hit})
+	if !result.Matched {
+		t.Fatalf("expected match")
+	}
+	if result.Reason != MatchReasonMatched {
+		t.Fatalf("unexpected reason %q", result.Reason)
+	}
+	if result.Hit.ID != hit.ID {
+		t.Fatalf("unexpected hit id %d", result.Hit.ID)
+	}
+}
+
+func TestPickBestSeriesMatchResultRejectsWrongShow(t *testing.T) {
+	result := PickBestSeriesMatchResult("Bleach", 2004, []SeriesSearchHit{
+		{
+			ID:            1,
+			Name:          "Breaking Bad",
+			OriginalName:  "Breaking Bad",
+			FirstAirDate:  "2008-01-20",
+			OriginCountry: []string{"US"},
+		},
+	})
+
+	if result.Matched {
+		t.Fatalf("expected no match")
+	}
+	if result.Reason != MatchReasonScoreRejected {
+		t.Fatalf("unexpected reason %q", result.Reason)
+	}
+}

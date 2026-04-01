@@ -11,9 +11,9 @@ if [[ -f "${PROJECT_DIR}/.env" ]]; then
   set +a
 fi
 
-DB_DSN="${POSTGRES_URL:-${DATABASE_URL:-${NEON_DATABASE_URL:-}}}"
+DB_DSN="${DATABASE_URL:-${POSTGRES_URL:-${NEON_DATABASE_URL:-}}}"
 if [[ -z "${DB_DSN}" ]]; then
-  echo "[cron-media-maintenance] missing DB DSN (POSTGRES_URL/DATABASE_URL; NEON_DATABASE_URL is compatibility fallback)" >&2
+  echo "[cron-media-maintenance] missing DB DSN (DATABASE_URL; POSTGRES_URL/NEON_DATABASE_URL are compatibility fallbacks)" >&2
   exit 1
 fi
 
@@ -68,8 +68,6 @@ run_dw() {
   sleep "${STEP_DELAY}"
 }
 
-run_dw "refresh:anime-v2" refresh-anime-v2
-run_dw "refresh:media-v2" refresh-media-v2
-run_dw "refresh:movie-v3" refresh-movie-v3
+run_dw "migrate" migrate
 
 echo "[$(now_utc)] done cron-media-maintenance"

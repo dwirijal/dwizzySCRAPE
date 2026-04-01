@@ -121,3 +121,36 @@ func TestDetailBackfillServiceContinuesOnPerSlugError(t *testing.T) {
 		t.Fatalf("unexpected requested slugs %#v", syncer.requested)
 	}
 }
+
+func TestDetailBackfillServiceFiltersIncludedSlugs(t *testing.T) {
+	catalog := &fakeCatalogBatchReader{
+		pages: map[int][]CatalogItem{
+			0: {
+				{Slug: "absolute-duo", PageNumber: 1},
+				{Slug: "ao-no-orchestra-season-2", PageNumber: 2},
+			},
+			2: {
+				{Slug: "yamada-kun-to-lv999-no-koi-wo-suru", PageNumber: 27},
+			},
+		},
+	}
+	syncer := &fakeDetailSyncer{}
+	service := NewDetailBackfillService(catalog, &fakeDetailAnimeSlugReader{}, syncer, time.Time{})
+
+	report, err := service.Backfill(context.Background(), DetailBackfillOptions{
+		BatchSize:    2,
+		IncludeSlugs: []string{"ao-no-orchestra-season-2", "yamada-kun-to-lv999-no-koi-wo-suru"},
+	})
+	if err != nil {
+		t.Fatalf("Backfill returned error: %v", err)
+	}
+	if report.Discovered != 2 {
+		t.Fatalf("expected 2 discovered, got %d", report.Discovered)
+	}
+	if report.Attempted != 2 {
+		t.Fatalf("expected 2 attempted, got %d", report.Attempted)
+	}
+	if !slices.Equal(syncer.requested, []string{"ao-no-orchestra-season-2", "yamada-kun-to-lv999-no-koi-wo-suru"}) {
+		t.Fatalf("unexpected requested slugs %#v", syncer.requested)
+	}
+}

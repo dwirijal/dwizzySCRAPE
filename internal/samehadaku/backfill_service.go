@@ -22,6 +22,7 @@ type EpisodeSyncer interface {
 type EpisodeBackfillOptions struct {
 	BatchSize    int
 	Limit        int
+	IncludeSlugs []string
 	SkipExisting bool
 	DelayBetween time.Duration
 	Progress     func(EpisodeBackfillProgress)
@@ -100,6 +101,12 @@ func (s *EpisodeBackfillService) Backfill(ctx context.Context, options EpisodeBa
 	report := EpisodeBackfillReport{
 		Failures: make(map[string]string),
 	}
+	include := make(map[string]struct{}, len(options.IncludeSlugs))
+	for _, slug := range options.IncludeSlugs {
+		if trimmed := strings.TrimSpace(slug); trimmed != "" {
+			include[trimmed] = struct{}{}
+		}
+	}
 	seen := make(map[string]struct{})
 	processed := 0
 
@@ -116,9 +123,27 @@ func (s *EpisodeBackfillService) Backfill(ctx context.Context, options EpisodeBa
 			if err := ctx.Err(); err != nil {
 				return report, err
 			}
+			if strings.EqualFold(strings.TrimSpace(item.ContentType), "movie") || strings.EqualFold(strings.TrimSpace(item.AnimeType), "movie") {
+				report.Skipped++
+				if options.Progress != nil {
+					options.Progress(EpisodeBackfillProgress{
+						Slug:       strings.TrimSpace(item.Slug),
+						PageNumber: item.PageNumber,
+						Action:     "skip",
+						Reason:     "movie_without_episode_backfill",
+						Counts:     report,
+					})
+				}
+				continue
+			}
 			slug := strings.TrimSpace(item.Slug)
 			if slug == "" {
 				continue
+			}
+			if len(include) > 0 {
+				if _, ok := include[slug]; !ok {
+					continue
+				}
 			}
 			if _, ok := seen[slug]; ok {
 				continue
